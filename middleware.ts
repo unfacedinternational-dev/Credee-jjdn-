@@ -8,7 +8,8 @@ export async function middleware(request: NextRequest) {
   const isCeoRoute = path.startsWith("/ceo");
   const isDashboardRoute = path === "/dashboard";
   const isSupportRoute = path.startsWith("/customer-service");
-  const isProtectedRoute = isLenderRoute || isBorrowerRoute || isCeoRoute || isDashboardRoute || isSupportRoute;
+  const isDirectoryRoute = path.startsWith("/directory");
+  const isProtectedRoute = isLenderRoute || isBorrowerRoute || isCeoRoute || isDashboardRoute || isSupportRoute || isDirectoryRoute;
 
   let response = NextResponse.next({ request });
 
@@ -78,6 +79,7 @@ export async function middleware(request: NextRequest) {
     (isBorrowerRoute && role === "borrower") ||
     (isDashboardRoute && (role === "lender" || role === "borrower")) ||
     (isSupportRoute && (role === "lender" || role === "borrower" || role === "ceo")) ||
+    (isDirectoryRoute && (role === "lender" || role === "borrower")) ||
     (isCeoRoute && role === "ceo");
 
   if (!allowed) {
