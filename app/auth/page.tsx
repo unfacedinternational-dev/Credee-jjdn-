@@ -78,29 +78,46 @@ export default function AuthPage() {
         return;
       }
 
+      // Clear any previously signed-in account in this browser before authenticating.
+      // This prevents a CEO session from being reused when another account signs in.
+      await supabase.auth.signOut({ scope: "local" });
+
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim().toLowerCase(),
         password,
       });
       if (authError) throw authError;
       if (!authData.user) throw new Error("Authentication failed.");
 
+      // Resolve the destination from the authenticated user's database profile,
+      // never from the selected registration role or shared password.
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role,suspended_at")
         .eq("id", authData.user.id)
         .single();
 
       if (profileError || !profile) {
+        await supabase.auth.signOut({ scope: "local" });
         throw new Error("Failed to retrieve your account role. Contact support.");
       }
+      if (profile.suspended_at) {
+        await supabase.auth.signOut({ scope: "local" });
+        throw new Error("This account is suspended. Please contact Customer Service.");
+      }
 
-      if (profile.role === "lender") router.push("/lender/dashboard");
-      else if (profile.role === "borrower") router.push("/borrower/portal");
-      else if (profile.role === "ceo") router.push("/ceo/super-admin");
-      else throw new Error("This account does not have an assigned platform role.");
+      let destination: string;
+      if (profile.role === "lender") destination = "/lender/dashboard";
+      else if (profile.role === "borrower") destination = "/borrower/portal";
+      else if (profile.role === "ceo" && authData.user.email?.toLowerCase() === "meonly88888888@gmail.com") destination = "/ceo/super-admin";
+      else {
+        await supabase.auth.signOut({ scope: "local" });
+        throw new Error("This account does not have an authorized platform role.");
+      }
 
-      router.refresh();
+      // A full navigation ensures middleware receives the newly issued session cookies.
+      window.location.replace(destination);
+      return;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
