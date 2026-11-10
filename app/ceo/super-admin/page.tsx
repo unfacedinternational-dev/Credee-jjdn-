@@ -44,11 +44,11 @@ export default function CeoAdminRoute() {
 
       const { data: profile, error: profileError } = await db
         .from("profiles")
-        .select("role,suspended_at")
+        .select("role,roles,suspended_at")
         .eq("id", user.id)
         .single();
 
-      if (profileError || profile?.role !== "ceo" || profile.suspended_at) {
+      if (profileError || !(profile?.roles ?? [profile?.role]).includes("ceo") || profile.suspended_at) {
         router.replace("/auth?error=role");
         return;
       }
