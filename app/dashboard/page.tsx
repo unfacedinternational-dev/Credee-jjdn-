@@ -104,6 +104,31 @@ export default function Dashboard() {
     setMarkingId("");
   }
 
+  async function askCeoToShareCredentials(borrowerId: string) {
+    if (profile?.role !== "lender") return;
+    setCredentialBusyId(borrowerId); setCredentialMessage("");
+    const db = createClient();
+    const { data: { user } } = await db.auth.getUser();
+    if (!user) { setCredentialMessage("Please sign in again."); setCredentialBusyId(""); return; }
+    const { error } = await db.from("credential_requests").insert({
+      lender_id: user.id, borrower_id: borrowerId,
+      reason: "Please review this request and coordinate the borrower's approved credential sharing.",
+      requested_fields: ["borrower_credentials"], status: "pending",
+    });
+    if (error) setCredentialMessage(error.message);
+    else { setCredentialRequests((current) => ({ ...current, [borrowerId]: "pending" })); setCredentialMessage("Your request has been sent to the CREDEE CEO for review."); }
+    setCredentialBusyId("");
+  }
+
+  async function consentToCredentialSharing(request: BorrowerCredentialRequest) {
+    setCredentialBusyId(request.id); setCredentialMessage("");
+    const { error } = await createClient().from("credential_requests")
+      .update({ borrower_consented_at: new Date().toISOString(), status: "released" })
+      .eq("id", request.id).eq("status", "approved");
+    if (error) setCredentialMessage(error.message);
+    else setBorrowerCredentialRequests((current) => current.map((item) => item.id === request.id ? { ...item, status: "released" } : item));
+    setCredentialBusyId("");
+  }
   async function logout() {
     const supabase = createClient();
     await supabase.auth.signOut();
