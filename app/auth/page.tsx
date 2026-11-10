@@ -11,6 +11,7 @@ export default function AuthPage() {
   const logoTaps = useRef(0);
   const [mode, setMode] = useState<"login" | "register" | "reset">("register");
   const [role, setRole] = useState<"lender" | "borrower">("lender");
+  const [selectedPortal, setSelectedPortal] = useState<"lender" | "borrower" | "ceo">("lender");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +23,7 @@ export default function AuthPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const requested = params.get("role");
-    if (requested === "lender" || requested === "borrower") setRole(requested);
+    if (requested === "lender" || requested === "borrower") { setRole(requested); setSelectedPortal(requested); }
     if (params.get("mode") === "reset") setMode("reset");
     const supabase = createClient();
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
@@ -35,6 +36,7 @@ export default function AuthPage() {
     logoTaps.current += 1;
     if (logoTaps.current >= 10) {
       setCeoAccess(true);
+      setSelectedPortal("ceo");
       setMode("login");
       setMessage("CEO sign-in enabled. Use the email and password assigned to your CEO account.");
       logoTaps.current = 0;
@@ -89,34 +91,33 @@ export default function AuthPage() {
       if (authError) throw authError;
       if (!authData.user) throw new Error("Authentication failed.");
 
-      // Resolve the destination from the authenticated user's database profile,
-      // never from the selected registration role or shared password.
+      // Portal selection is checked against roles provisioned in the database.
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role,suspended_at")
+        .select("role,roles,suspended_at")
         .eq("id", authData.user.id)
         .single();
 
       if (profileError || !profile) {
         await supabase.auth.signOut({ scope: "local" });
-        throw new Error("Failed to retrieve your account role. Contact support.");
+        throw new Error("Failed to retrieve your account permissions. Contact support.");
       }
       if (profile.suspended_at) {
         await supabase.auth.signOut({ scope: "local" });
         throw new Error("This account is suspended. Please contact Customer Service.");
       }
 
-      let destination: string;
-      if (profile.role === "lender") destination = "/lender/dashboard";
-      else if (profile.role === "borrower") destination = "/borrower/portal";
-      else if (profile.role === "ceo" && authData.user.email?.toLowerCase() === "meonly88888888@gmail.com") destination = "/ceo/super-admin";
-      else {
+      const permittedRoles: string[] = Array.isArray(profile.roles) ? profile.roles : [profile.role];
+      if (!permittedRoles.includes(selectedPortal)) {
         await supabase.auth.signOut({ scope: "local" });
-        throw new Error("This account does not have an authorized platform role.");
+        throw new Error("This account is not authorized for the selected portal.");
+      }
+      if (selectedPortal === "ceo" && !ceoAccess) {
+        await supabase.auth.signOut({ scope: "local" });
+        throw new Error("CEO sign-in is available only through the restricted CREDEE logo access.");
       }
 
-      // A full navigation ensures middleware receives the newly issued session cookies.
-      window.location.replace(destination);
+      window.location.replace(selectedPortal === "ceo" ? "/ceo/super-admin" : "/dashboard?portal=" + selectedPortal);
       return;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Something went wrong.");
@@ -148,6 +149,16 @@ export default function AuthPage() {
               : mode === "reset" ? "Create a new password for your CREDEE account." : "Sign in to your private workspace."}
         </p>
 
+        {!ceoAccess && mode === "login" && (
+          <div className="mt-5">
+            <label className="mb-2 block text-sm" htmlFor="login-portal">Sign in to</label>
+            <select id="login-portal" className="field" value={selectedPortal} onChange={(event) => setSelectedPortal(event.target.value as "lender" | "borrower")}>
+              <option value="lender">Lender portal</option>
+              <option value="borrower">Borrower portal</option>
+            </select>
+          </div>
+        )}
+
         {!ceoAccess && mode !== "reset" && (
           <div className="mt-6 grid grid-cols-2 gap-2">
             <button
@@ -172,7 +183,7 @@ export default function AuthPage() {
             <>
               <div>
                 <label className="mb-2 block text-sm" htmlFor="account-role">Account type</label>
-                <select id="account-role" className="field" value={role} onChange={(event) => setRole(event.target.value as "lender" | "borrower")}>
+                <select id="account-role" className="field" value={role} onChange={(event) => { const nextRole = event.target.value as "lender" | "borrower"; setRole(nextRole); setSelectedPortal(nextRole); }}>
                   <option value="lender">Lender</option>
                   <option value="borrower">Borrower</option>
                 </select>
