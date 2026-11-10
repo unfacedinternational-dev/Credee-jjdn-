@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2 } from "lucide-react";
 
-type Profile = { display_name: string | null; role: "lender" | "borrower"; directory_consent: boolean; address_sharing_consent: boolean };
+type Profile = { display_name: string | null; role: "lender" | "borrower"; directory_consent: boolean; address_sharing_consent: boolean; full_address: string | null; facebook_url: string | null; lender_directory_consent: boolean };
 type BorrowerDirectoryItem = { borrower_id: string; display_name: string; full_address: string | null; completed_loans: number; average_rating: number | null; five_star_loans: number; late_loans: number; contributing_lenders: number };
 type BorrowerCredentialRequest = { id: string; reason: string; requested_fields: string[]; status: string; created_at: string };
 type Loan = {
@@ -24,6 +24,11 @@ export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [consent, setConsent] = useState(false);
   const [addressConsent, setAddressConsent] = useState(false);
+  const [profileAddress, setProfileAddress] = useState("");
+  const [profileFacebook, setProfileFacebook] = useState("");
+  const [lenderDirectoryConsent, setLenderDirectoryConsent] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
   const [consentMessage, setConsentMessage] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -44,7 +49,7 @@ export default function Dashboard() {
       if (!user) { router.replace("/auth"); return; }
       setEmail(user.email ?? "");
       const { data: p, error: pe } = await supabase.from("profiles")
-        .select("display_name,role,roles,directory_consent,address_sharing_consent").eq("id", user.id).single();
+        .select("display_name,role,roles,directory_consent,address_sharing_consent,full_address,facebook_url,lender_directory_consent").eq("id", user.id).single();
       if (pe || !p) {
         setError("Your profile is not ready yet. Please contact Customer Service.");
         setLoading(false);
@@ -59,6 +64,9 @@ export default function Dashboard() {
       setProfile({ ...p, role: activePortal } as Profile);
       setConsent(Boolean(p.directory_consent));
       setAddressConsent(Boolean(p.address_sharing_consent));
+      setProfileAddress(p.full_address ?? "");
+      setProfileFacebook(p.facebook_url ?? "");
+      setLenderDirectoryConsent(Boolean(p.lender_directory_consent));
       if (activePortal === "lender") {
         const { data: directoryData } = await supabase.rpc("get_shared_account_directory");
         setCommunityBorrowers((directoryData?.borrowers ?? []) as BorrowerDirectoryItem[]);
@@ -79,6 +87,17 @@ export default function Dashboard() {
     })();
   }, [router]);
 
+  async function saveMemberDetails() {
+    setProfileSaving(true); setProfileMessage("");
+    if (!profileAddress.trim()) { setProfileMessage("Please enter your complete residential address."); setProfileSaving(false); return; }
+    if (profile?.role === "lender" && !/^https:\/\/(www\.)?facebook\.com\/[^\s]+$/i.test(profileFacebook.trim())) { setProfileMessage("Enter a valid Facebook profile link beginning with https://facebook.com/."); setProfileSaving(false); return; }
+    const updates: Record<string, unknown> = { full_address: profileAddress.trim() };
+    if (profile?.role === "lender") { updates.facebook_url = profileFacebook.trim(); updates.lender_directory_consent = lenderDirectoryConsent; }
+    const db = createClient();
+    const { error } = await db.from("profiles").update(updates).eq("id", (await db.auth.getUser()).data.user?.id);
+    setProfileMessage(error ? error.message : "Your profile details have been saved.");
+    setProfileSaving(false);
+  }
   async function saveConsent() {
     const db = createClient();
     const { error } = await db.from("profiles").update({ directory_consent: !consent })
@@ -169,6 +188,17 @@ export default function Dashboard() {
         <p className="muted mt-2">{email}</p>
       </div>
 
+      <section className="card mt-7">
+        <h2 className="text-xl font-bold">Profile details</h2>
+        <p className="muted mt-2 text-sm">Keep your contact information current. Sharing settings control what other CREDEE members can see.</p>
+        <div className="mt-4"><label className="mb-2 block text-sm" htmlFor="workspace-address">Complete residential address</label><textarea id="workspace-address" className="field min-h-24 resize-y" value={profileAddress} onChange={(event) => setProfileAddress(event.target.value)} placeholder="House / unit, street, barangay, city, province, postal code" /></div>
+        {profile?.role === "lender" && <>
+          <div className="mt-4"><label className="mb-2 block text-sm" htmlFor="workspace-facebook">Facebook profile link</label><input id="workspace-facebook" type="url" className="field" value={profileFacebook} onChange={(event) => setProfileFacebook(event.target.value)} placeholder="https://www.facebook.com/your.profile" /></div>
+          <label className="mt-4 flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={lenderDirectoryConsent} onChange={(event) => setLenderDirectoryConsent(event.target.checked)} /><span>Show my name, address and Facebook profile to registered CREDEE borrowers.</span></label>
+        </>}
+        <button type="button" onClick={() => void saveMemberDetails()} disabled={profileSaving} className="btn btn-primary mt-4">{profileSaving ? "Saving…" : "Save profile details"}</button>
+        {profileMessage && <p role="status" className="mt-3 text-sm text-violet-200">{profileMessage}</p>}
+      </section>
       <div className="mt-8 grid gap-4 md:grid-cols-3">
         <div className="card"><Users className="text-violet-300" /><p className="muted mt-4 text-sm">Account type</p><p className="mt-1 text-xl font-bold capitalize">{profile?.role}</p></div>
         <div className="card"><Wallet className="text-amber-300" /><p className="muted mt-4 text-sm">Loan records visible to your account</p><p className="mt-1 text-xl font-bold">{loans.length}</p></div>
