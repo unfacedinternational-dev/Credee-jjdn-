@@ -213,7 +213,7 @@ export default function Dashboard() {
                 <p className="mt-3 text-sm"><span className="muted">Address: </span>{borrower.full_address || "Not shared by borrower"}</p>
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => void askCeoToShareCredentials(borrower.borrower_id)} disabled={Boolean(requestStatus && ["pending","approved","released"].includes(requestStatus)) || credentialBusyId === borrower.borrower_id} className="btn btn-outline px-3 py-2 text-xs">
-                    {credentialBusyId === borrower.borrower_id ? "Sending…" : requestStatus === "pending" ? "Request pending" : requestStatus === "approved" ? "CEO approved, awaiting consent" : requestStatus === "released" ? "Credentials approved" : requestStatus === "rejected" ? "Request again" : "Ask CEO to share credentials"}
+                    {credentialBusyId === borrower.borrower_id ? "Sending…" : requestStatus === "pending" ? "Request pending" : requestStatus === "approved" ? "CEO approved, awaiting consent" : requestStatus === "released" ? "Borrower consented" : requestStatus === "rejected" ? "Request again" : "Ask CEO to share credentials"}
                   </button>
                 </div>
               </article>;
