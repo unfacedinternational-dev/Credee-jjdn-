@@ -157,11 +157,6 @@ export default function AuthPage() {
 
         {message && <p role="status" className="mt-4 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{message}</p>}
 
-        {!ceoAccess && (
-          <p className="muted mt-6 text-xs leading-5">
-            CEO accounts are provisioned privately and cannot be selected during public registration.
-          </p>
-        )}
         {ceoAccess && (
           <button type="button" onClick={() => { setCeoAccess(false); setMessage(""); }} className="mt-5 text-sm text-violet-300">
             Return to regular sign in
