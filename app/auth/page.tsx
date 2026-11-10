@@ -14,6 +14,7 @@ export default function AuthPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [ceoAccess, setCeoAccess] = useState(false);
@@ -42,6 +43,9 @@ export default function AuthPage() {
       const supabase = createClient();
 
       if (mode === "register") {
+        const strongPassword = password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
+        if (!strongPassword) throw new Error("Use at least 8 characters with uppercase and lowercase letters, a number, and a special character.");
+        if (password !== confirmPassword) throw new Error("The passwords do not match.");
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -149,7 +153,15 @@ export default function AuthPage() {
           <div>
             <label className="mb-2 block text-sm" htmlFor="password">Password</label>
             <input id="password" className="field" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete={mode === "register" ? "new-password" : "current-password"} />
+            {mode === "register" && <p className="muted mt-2 text-xs leading-5">Password must contain at least 8 characters, including uppercase letters (A–Z), lowercase letters (a–z), numbers (0–9), and a special character (such as ! @ # $ %).</p>}
           </div>
+          {mode === "register" && (
+            <div>
+              <label className="mb-2 block text-sm" htmlFor="confirm-password">Confirm password</label>
+              <input id="confirm-password" className="field" type="password" minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required autoComplete="new-password" />
+              {confirmPassword && <p className={`mt-2 text-xs ${password === confirmPassword ? "text-emerald-300" : "text-amber-300"}`}>{password === confirmPassword ? "Passwords match." : "Passwords do not match yet."}</p>}
+            </div>
+          )}
           <button disabled={busy} className="btn btn-primary w-full disabled:opacity-50">
             {busy ? "Please wait…" : mode === "register" ? "Create account" : "Sign in"}
           </button>
