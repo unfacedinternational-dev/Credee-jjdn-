@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CreditTrust - Multi-Lender & Borrower Reputation Platform",
+  title: "Credee - Multi-Lender & Borrower Reputation Platform",
   description:
     "Connect lenders and borrowers through a transparent lending and repayment reputation platform.",
 };
