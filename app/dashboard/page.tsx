@@ -107,8 +107,8 @@ export default function Dashboard() {
   }
   async function addBorrower(borrower: BorrowerSearchResult) {
     const db = createClient(); const { data: { user } } = await db.auth.getUser(); if (!user) return;
-    const { error } = await db.from("lender_borrowers").insert({ lender_id: user.id, borrower_id: borrower.borrower_id });
-    if (error && !error.message.toLowerCase().includes("duplicate")) setBorrowerSearchMessage(error.message);
+    const { error } = await db.rpc("add_borrower_to_lender", { p_borrower_id: borrower.borrower_id });
+    if (error) setBorrowerSearchMessage(error.message);
     else { setBorrowerSearchMessage(borrower.display_name + " has been added to your borrower list."); setBorrowerSearchResults(current => current.filter(item => item.borrower_id !== borrower.borrower_id)); await refreshAssignedBorrowers(); }
   }
   async function uploadBorrowerDocument(borrowerId: string, file?: File) {
@@ -162,13 +162,9 @@ export default function Dashboard() {
     const db = createClient();
     const { data: { user } } = await db.auth.getUser();
     if (!user) { setCredentialMessage("Please sign in again."); setCredentialBusyId(""); return; }
-    const { error } = await db.from("credential_requests").insert({
-      lender_id: user.id, borrower_id: borrowerId,
-      reason: "Please review this request and coordinate the borrower's approved credential sharing.",
-      requested_fields: ["borrower_credentials"], status: "pending",
-    });
+    const { error } = await db.rpc("request_borrower_document_approval", { p_borrower_id: borrowerId });
     if (error) setCredentialMessage(error.message);
-    else { setCredentialRequests((current) => ({ ...current, [borrowerId]: "pending" })); setCredentialMessage("Your request has been sent to the CREDEE CEO for review."); }
+    else { setCredentialRequests((current) => ({ ...current, [borrowerId]: "pending" })); setCredentialMessage("Your document access request has been sent to the CREDEE CEO."); }
     setCredentialBusyId("");
   }
 
