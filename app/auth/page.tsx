@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 export default function AuthPage() {
   const router = useRouter();
   const logoTaps = useRef(0);
-  const [mode, setMode] = useState<"login" | "register">("register");
+  const [mode, setMode] = useState<"login" | "register" | "reset">("register");
   const [role, setRole] = useState<"lender" | "borrower">("lender");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -20,8 +20,15 @@ export default function AuthPage() {
   const [ceoAccess, setCeoAccess] = useState(false);
 
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("role");
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("role");
     if (requested === "lender" || requested === "borrower") setRole(requested);
+    if (params.get("mode") === "reset") setMode("reset");
+    const supabase = createClient();
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setMode("reset");
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   function handleBrandTap() {
@@ -41,6 +48,20 @@ export default function AuthPage() {
 
     try {
       const supabase = createClient();
+
+      if (mode === "reset") {
+        if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+          throw new Error("Use at least 8 characters with uppercase and lowercase letters, a number, and a special character.");
+        }
+        if (password !== confirmPassword) throw new Error("The passwords do not match.");
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        setPassword("");
+        setConfirmPassword("");
+        setMode("login");
+        setMessage("Your password has been updated. You can now sign in with your new password.");
+        return;
+      }
 
       if (mode === "register") {
         const strongPassword = password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
@@ -100,17 +121,17 @@ export default function AuthPage() {
         </button>
 
         <h1 className="mt-8 text-3xl font-bold">
-          {ceoAccess ? "CEO sign in" : mode === "register" ? "Create your account" : "Welcome back"}
+          {ceoAccess ? "CEO sign in" : mode === "register" ? "Create your account" : mode === "reset" ? "Set a new password" : "Welcome back"}
         </h1>
         <p className="muted mt-2">
           {ceoAccess
             ? "Restricted administrator access."
             : mode === "register"
               ? "Choose the account type that fits you."
-              : "Sign in to your private workspace."}
+              : mode === "reset" ? "Create a new password for your CREDEE account." : "Sign in to your private workspace."}
         </p>
 
-        {!ceoAccess && (
+        {!ceoAccess && mode !== "reset" && (
           <div className="mt-6 grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -146,16 +167,16 @@ export default function AuthPage() {
             </>
           )}
 
-          <div>
+          {mode !== "reset" && <div>
             <label className="mb-2 block text-sm" htmlFor="email">Email address</label>
             <input id="email" className="field" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
-          </div>
+          </div>}
           <div>
-            <label className="mb-2 block text-sm" htmlFor="password">Password</label>
+            <label className="mb-2 block text-sm" htmlFor="password">{mode === "reset" ? "New password" : "Password"}</label>
             <input id="password" className="field" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete={mode === "register" ? "new-password" : "current-password"} />
-            {mode === "register" && <p className="muted mt-2 text-xs leading-5">Password must contain at least 8 characters, including uppercase letters (A–Z), lowercase letters (a–z), numbers (0–9), and a special character (such as ! @ # $ %).</p>}
+            {mode !== "login" && <p className="muted mt-2 text-xs leading-5">Password must contain at least 8 characters, including uppercase letters (A–Z), lowercase letters (a–z), numbers (0–9), and a special character (such as ! @ # $ %).</p>}
           </div>
-          {mode === "register" && (
+          {mode !== "login" && (
             <div>
               <label className="mb-2 block text-sm" htmlFor="confirm-password">Confirm password</label>
               <input id="confirm-password" className="field" type="password" minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required autoComplete="new-password" />
@@ -163,7 +184,7 @@ export default function AuthPage() {
             </div>
           )}
           <button disabled={busy} className="btn btn-primary w-full disabled:opacity-50">
-            {busy ? "Please wait…" : mode === "register" ? "Create account" : "Sign in"}
+            {busy ? "Please wait…" : mode === "register" ? "Create account" : mode === "reset" ? "Update password" : "Sign in"}
           </button>
         </form>
 
