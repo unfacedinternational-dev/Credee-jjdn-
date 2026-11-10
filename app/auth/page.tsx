@@ -35,6 +35,7 @@ export default function AuthPage() {
   function handleBrandTap() {
     logoTaps.current += 1;
     if (logoTaps.current >= 10) {
+      document.cookie = "credee_ceo_unlock=1; Max-Age=1800; Path=/ceo; SameSite=Lax; Secure";
       setCeoAccess(true);
       setSelectedPortal("ceo");
       setMode("login");
