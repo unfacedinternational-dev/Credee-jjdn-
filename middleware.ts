@@ -6,7 +6,9 @@ export async function middleware(request: NextRequest) {
   const isLenderRoute = path.startsWith("/lender");
   const isBorrowerRoute = path.startsWith("/borrower");
   const isCeoRoute = path.startsWith("/ceo");
-  const isProtectedRoute = isLenderRoute || isBorrowerRoute || isCeoRoute;
+  const isDashboardRoute = path === "/dashboard";
+  const isSupportRoute = path.startsWith("/customer-service");
+  const isProtectedRoute = isLenderRoute || isBorrowerRoute || isCeoRoute || isDashboardRoute || isSupportRoute;
 
   let response = NextResponse.next({ request });
 
@@ -72,17 +74,21 @@ export async function middleware(request: NextRequest) {
 
   const role = profile.role;
   const allowed =
-    (isLenderRoute && (role === "lender" || role === "ceo")) ||
-    (isBorrowerRoute && (role === "borrower" || role === "ceo")) ||
+    (isLenderRoute && role === "lender") ||
+    (isBorrowerRoute && role === "borrower") ||
+    (isDashboardRoute && (role === "lender" || role === "borrower")) ||
+    (isSupportRoute && (role === "lender" || role === "borrower" || role === "ceo")) ||
     (isCeoRoute && role === "ceo");
 
   if (!allowed) {
     const destination =
-      role === "lender"
-        ? "/lender/dashboard"
-        : role === "borrower"
-          ? "/borrower/portal"
-          : "/auth?error=role";
+      role === "ceo"
+        ? "/ceo/super-admin"
+        : role === "lender"
+          ? "/lender/dashboard"
+          : role === "borrower"
+            ? "/borrower/portal"
+            : "/auth?error=role";
 
     return redirectWithCookies(new URL(destination, request.url));
   }
