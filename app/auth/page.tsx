@@ -95,20 +95,20 @@ export default function AuthPage() {
         if (!fullAddress.trim()) throw new Error("Please enter your complete residential address.");
         const normalizedPhone = normalizePhone(phone);
         if (!/^\\+639\\d{9}$/.test(normalizedPhone)) throw new Error("Enter a valid Philippine mobile number, such as 09XXXXXXXXX or +639XXXXXXXXX.");
-        if (role === "lender" && !/^https:\/\/(www\.)?facebook\.com\/[^\s]+$/i.test(facebookUrl.trim())) {
+        if (role === "borrower" && !/^https:\/\/(www\.)?facebook\.com\/[^\s]+$/i.test(facebookUrl.trim())) {
           throw new Error("Please enter a valid Facebook profile link beginning with https://facebook.com/");
         }
-        const { error } = await supabase.auth.signUp({
-          email,
+        const { data: signUpData, error } = await supabase.auth.signUp({
+          phone: normalizedPhone,
           password,
           options: { data: {
             display_name: name,
             requested_role: role,
             full_address: fullAddress.trim(),
-            facebook_url: role === "lender" ? facebookUrl.trim() : null,
+            facebook_url: role === "borrower" ? facebookUrl.trim() : null,
             directory_consent: role === "borrower",
             address_sharing_consent: role === "borrower",
-            lender_directory_consent: role === "lender" ? lenderDirectoryConsent : false,
+            lender_directory_consent: role === "borrower" ? lenderDirectoryConsent : false,
           } },
         });
         if (error) throw error;
@@ -245,7 +245,7 @@ export default function AuthPage() {
                   </div>
                   <label className="flex items-start gap-3 text-sm leading-6">
                     <input type="checkbox" className="mt-1" checked={lenderDirectoryConsent} onChange={(event) => setLenderDirectoryConsent(event.target.checked)} required />
-                    <span>I agree that my name, full address and Facebook profile link may be shown to registered CREDEE borrowers.</span>
+                    <span>I agree that my name, full address and Facebook profile link may be shown to registered CREDEE lenders.</span>
                   </label>
                 </>
               ) : (
@@ -256,10 +256,17 @@ export default function AuthPage() {
             </>
           )}
 
-          {mode !== "reset" && <div>
-            <label className="mb-2 block text-sm" htmlFor="email">Email address</label>
-            <input id="email" className="field" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
+          {mode === "verify" && <div>
+            <label className="mb-2 block text-sm" htmlFor="sms-code">SMS verification code</label>
+            <input id="sms-code" className="field" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(event) => setOtp(event.target.value)} required placeholder="Enter the code sent to your phone" />
           </div>}
+          {mode !== "reset" && mode !== "verify" && (ceoAccess ? <div>
+            <label className="mb-2 block text-sm" htmlFor="email">CEO email address</label>
+            <input id="email" className="field" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
+          </div> : mode === "login" ? <div>
+            <label className="mb-2 block text-sm" htmlFor="mobile-number-login">Mobile number</label>
+            <input id="mobile-number-login" className="field" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required placeholder="09XXXXXXXXX" autoComplete="tel" />
+          </div> : null)}
           {mode !== "verify" && <div>
             <label className="mb-2 block text-sm" htmlFor="password">{mode === "reset" ? "New password" : "Password"}</label>
             <input id="password" className="field" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete={mode === "register" ? "new-password" : "current-password"} />
@@ -273,7 +280,7 @@ export default function AuthPage() {
             </div>
           )}
           <button disabled={busy} className="btn btn-primary w-full disabled:opacity-50">
-            {busy ? "Please wait…" : mode === "register" ? "Create account" : mode === "reset" ? "Update password" : "Sign in"}
+            {busy ? "Please wait…" : mode === "register" ? "Create account" : mode === "reset" ? "Update password" : mode === "verify" ? "Verify number" : "Sign in"}
           </button>
         </form>
 
