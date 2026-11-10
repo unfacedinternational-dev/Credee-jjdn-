@@ -6,6 +6,7 @@ export async function middleware(request: NextRequest) {
   const isLenderRoute = path.startsWith("/lender");
   const isBorrowerRoute = path.startsWith("/borrower");
   const isCeoRoute = path.startsWith("/ceo");
+  const ceoGateUnlocked = request.cookies.get("credee_ceo_unlock")?.value === "1";
   const isDashboardRoute = path === "/dashboard";
   const isSupportRoute = path.startsWith("/customer-service");
   const isDirectoryRoute = path.startsWith("/directory");
@@ -86,7 +87,7 @@ export async function middleware(request: NextRequest) {
     )) ||
     (isSupportRoute && (roles.includes("lender") || roles.includes("borrower") || roles.includes("ceo"))) ||
     (isDirectoryRoute && (roles.includes("lender") || roles.includes("borrower"))) ||
-    (isCeoRoute && roles.includes("ceo"));
+    (isCeoRoute && roles.includes("ceo") && ceoGateUnlocked);
 
   if (!allowed) return redirectWithCookies(new URL("/auth?error=role", request.url));
 
