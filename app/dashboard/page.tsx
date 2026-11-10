@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2 } from "lucide-react";
 
-type Profile = { display_name: string | null; role: "lender" | "borrower" | "ceo"; directory_consent: boolean };
+type Profile = { display_name: string | null; role: "lender" | "borrower"; directory_consent: boolean };
 type Loan = {
   id: string;
   borrower_id: string;
@@ -19,6 +19,7 @@ type Loan = {
 
 export default function Dashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [consent, setConsent] = useState(false);
   const [consentMessage, setConsentMessage] = useState("");
@@ -36,15 +37,19 @@ export default function Dashboard() {
       if (!user) { router.replace("/auth"); return; }
       setEmail(user.email ?? "");
       const { data: p, error: pe } = await supabase.from("profiles")
-        .select("display_name,role,directory_consent").eq("id", user.id).single();
+        .select("display_name,role,roles,directory_consent").eq("id", user.id).single();
       if (pe || !p) {
         setError("Your profile is not ready yet. Please contact Customer Service.");
         setLoading(false);
         return;
       }
-      if (p.role === "ceo") { router.replace("/ceo/super-admin"); return; }
-      if (p.role !== "lender" && p.role !== "borrower") { router.replace("/auth"); return; }
-      setProfile(p as Profile);
+      const availableRoles: string[] = Array.isArray(p.roles) ? p.roles : [p.role];
+      const requestedPortal = searchParams.get("portal");
+      const activePortal = requestedPortal === "lender" || requestedPortal === "borrower"
+        ? requestedPortal
+        : (p.role === "lender" || p.role === "borrower" ? p.role : null);
+      if (!activePortal || !availableRoles.includes(activePortal)) { router.replace("/auth?error=role"); return; }
+      setProfile({ ...p, role: activePortal } as Profile);
       setConsent(Boolean(p.directory_consent));
       const { data: l, error: loanError } = await supabase.from("loans")
         .select("id,borrower_id,principal_amount,interest_rate,due_date,status,created_at,rating")
@@ -53,7 +58,7 @@ export default function Dashboard() {
       setLoans((l ?? []) as Loan[]);
       setLoading(false);
     })();
-  }, [router]);
+  }, [router, searchParams]);
 
   async function saveConsent() {
     const db = createClient();
