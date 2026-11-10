@@ -121,10 +121,10 @@ export default function AuthPage() {
       // This prevents a CEO session from being reused when another account signs in.
       await supabase.auth.signOut({ scope: "local" });
 
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
+      const credentials = selectedPortal === "ceo"
+        ? { email: email.trim().toLowerCase(), password }
+        : { phone: normalizePhone(phone), password };
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword(credentials);
       if (authError) throw authError;
       if (!authData.user) throw new Error("Authentication failed.");
 
@@ -260,12 +260,12 @@ export default function AuthPage() {
             <label className="mb-2 block text-sm" htmlFor="email">Email address</label>
             <input id="email" className="field" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
           </div>}
-          <div>
+          {mode !== "verify" && <div>
             <label className="mb-2 block text-sm" htmlFor="password">{mode === "reset" ? "New password" : "Password"}</label>
             <input id="password" className="field" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete={mode === "register" ? "new-password" : "current-password"} />
             {mode !== "login" && <p className="muted mt-2 text-xs leading-5">Password must contain at least 8 characters, including uppercase letters (A–Z), lowercase letters (a–z), numbers (0–9), and a special character (such as ! @ # $ %).</p>}
-          </div>
-          {mode !== "login" && (
+          </div>}
+          {(mode === "register" || mode === "reset") && (
             <div>
               <label className="mb-2 block text-sm" htmlFor="confirm-password">Confirm password</label>
               <input id="confirm-password" className="field" type="password" minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required autoComplete="new-password" />
