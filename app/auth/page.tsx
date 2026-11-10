@@ -15,8 +15,6 @@ export default function AuthPage() {
   const [name, setName] = useState("");
   const [fullAddress, setFullAddress] = useState("");
   const [facebookUrl, setFacebookUrl] = useState("");
-  const [directoryConsent, setDirectoryConsent] = useState(false);
-  const [addressSharingConsent, setAddressSharingConsent] = useState(false);
   const [lenderDirectoryConsent, setLenderDirectoryConsent] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
