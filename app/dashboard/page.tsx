@@ -103,7 +103,7 @@ export default function Dashboard() {
           <p className="muted mt-1 text-sm">Private workspace</p>
         </div>
         <div className="flex gap-2">
-          <a href="/directory" className="btn btn-outline">Community directory</a>
+          <a href={"/directory?portal="+profile?.role} className="btn btn-outline">Community directory</a>
           <button onClick={logout} className="btn btn-outline"><LogOut size={16} className="mr-2" /> Sign out</button>
         </div>
       </header>
