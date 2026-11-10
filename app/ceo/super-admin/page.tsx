@@ -107,14 +107,14 @@ export default function CeoAdminRoute() {
     }
   }
 
-  async function decideCredentialRequest(request: CredentialRequest, decision: "approved" | "rejected") {
+  async function decideCredentialRequest(request: CredentialRequest, decision: "released" | "rejected") {
     setCredentialActionBusy(request.id); setCredentialActionMessage("");
     const db = createClient();
     const { data: { user } } = await db.auth.getUser();
     if (!user) { setCredentialActionMessage("Please sign in again."); setCredentialActionBusy(""); return; }
     const { error } = await db.from("credential_requests").update({ status: decision, ceo_decided_by: user.id, ceo_decided_at: new Date().toISOString() }).eq("id", request.id).eq("status", "pending");
     if (error) setCredentialActionMessage(error.message);
-    else { setCredentialRequests((current) => current.map((item) => item.id === request.id ? { ...item, status: decision } : item)); setCredentialActionMessage("Request " + decision + ". The borrower must still consent before credentials can be released."); }
+    else { setCredentialRequests((current) => current.map((item) => item.id === request.id ? { ...item, status: decision } : item)); setCredentialActionMessage(decision === "released" ? "CEO approved. The borrower can now view documents shared by this lender." : "Request rejected."); }
     setCredentialActionBusy("");
   }
   async function signOut() {
@@ -166,13 +166,13 @@ export default function CeoAdminRoute() {
       </section>
 
       <section className="card mt-7">
-        <div><h2 className="text-xl font-bold">Borrower credential requests</h2><p className="muted mt-1 text-sm">Review lender requests. Approval does not release credentials; the borrower must separately consent.</p></div>
+        <div><h2 className="text-xl font-bold">Borrower credential requests</h2><p className="muted mt-1 text-sm">Review lender requests. CEO approval enables the borrower to view documents uploaded by the requesting lender.</p></div>
         {credentialActionMessage && <p role="status" className="mt-3 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{credentialActionMessage}</p>}
         <div className="mt-4 space-y-3">
           {credentialRequests.map((request) => <article key={request.id} className="rounded-xl border border-white/10 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">{request.borrower_name}</p><p className="muted mt-1 text-xs">Requested by {request.lender_name}</p><p className="muted mt-2 text-sm">{request.reason}</p><p className="muted mt-1 text-xs">Requested: {request.requested_fields.join(", ")}</p></div><span className="rounded-full bg-white/5 px-3 py-1 text-xs capitalize">{request.status}</span></div>
-            {request.status === "pending" && <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void decideCredentialRequest(request, "approved")} disabled={credentialActionBusy === request.id} className="btn btn-primary px-3 py-2 text-xs">{credentialActionBusy === request.id ? "Saving…" : "Approve request"}</button><button type="button" onClick={() => void decideCredentialRequest(request, "rejected")} disabled={credentialActionBusy === request.id} className="btn btn-outline px-3 py-2 text-xs">Reject</button></div>}
-            {request.status === "approved" && <p className="mt-3 text-xs text-amber-200">Waiting for borrower consent before release.</p>}
+            {request.status === "pending" && <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void decideCredentialRequest(request, "released")} disabled={credentialActionBusy === request.id} className="btn btn-primary px-3 py-2 text-xs">{credentialActionBusy === request.id ? "Saving…" : "Approve request"}</button><button type="button" onClick={() => void decideCredentialRequest(request, "rejected")} disabled={credentialActionBusy === request.id} className="btn btn-outline px-3 py-2 text-xs">Reject</button></div>}
+            {request.status === "released" && <p className="mt-3 text-xs text-emerald-200">Approved. The borrower can view shared documents in their workspace.</p>}
           </article>)}
           {credentialRequests.length === 0 && <p className="muted rounded-xl border border-white/10 p-6 text-center text-sm">No credential requests yet.</p>}
         </div>
