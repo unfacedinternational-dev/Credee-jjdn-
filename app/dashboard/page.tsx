@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2 } from "lucide-react";
 
 type Profile = { display_name: string | null; role: "lender" | "borrower"; directory_consent: boolean };
+type BorrowerDirectoryItem = { borrower_id: string; display_name: string; full_address: string | null; completed_loans: number; average_rating: number | null; five_star_loans: number; late_loans: number; contributing_lenders: number };
+type BorrowerCredentialRequest = { id: string; reason: string; requested_fields: string[]; status: string; created_at: string };
 type Loan = {
   id: string;
   borrower_id: string;
@@ -28,6 +30,11 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [markingId, setMarkingId] = useState("");
   const [paymentMessage, setPaymentMessage] = useState("");
+  const [communityBorrowers, setCommunityBorrowers] = useState<BorrowerDirectoryItem[]>([]);
+  const [credentialRequests, setCredentialRequests] = useState<Record<string, string>>({});
+  const [borrowerCredentialRequests, setBorrowerCredentialRequests] = useState<BorrowerCredentialRequest[]>([]);
+  const [credentialMessage, setCredentialMessage] = useState("");
+  const [credentialBusyId, setCredentialBusyId] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -50,6 +57,17 @@ export default function Dashboard() {
       if (!activePortal || !availableRoles.includes(activePortal)) { router.replace("/auth?error=role"); return; }
       setProfile({ ...p, role: activePortal } as Profile);
       setConsent(Boolean(p.directory_consent));
+      if (activePortal === "lender") {
+        const { data: directoryData } = await supabase.rpc("get_shared_account_directory");
+        setCommunityBorrowers((directoryData?.borrowers ?? []) as BorrowerDirectoryItem[]);
+        const { data: requestRows } = await supabase.from("credential_requests").select("borrower_id,status,created_at").eq("lender_id", user.id).order("created_at", { ascending: false });
+        const requestMap: Record<string, string> = {};
+        (requestRows ?? []).forEach((request: { borrower_id: string; status: string }) => { if (!requestMap[request.borrower_id]) requestMap[request.borrower_id] = request.status; });
+        setCredentialRequests(requestMap);
+      } else {
+        const { data: requestRows } = await supabase.from("credential_requests").select("id,reason,requested_fields,status,created_at").eq("borrower_id", user.id).order("created_at", { ascending: false });
+        setBorrowerCredentialRequests((requestRows ?? []) as BorrowerCredentialRequest[]);
+      }
       const { data: l, error: loanError } = await supabase.from("loans")
         .select("id,borrower_id,principal_amount,interest_rate,due_date,status,created_at,rating")
         .order("created_at", { ascending: false }).limit(50);
