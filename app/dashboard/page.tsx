@@ -177,6 +177,49 @@ export default function Dashboard() {
         </section>
       )}
 
+      {profile?.role === "lender" && (
+        <section className="card mt-7">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div><div className="eyebrow">Shared community</div><h2 className="mt-2 text-xl font-bold">Borrower directory</h2>
+              <p className="muted mt-2 text-sm">Borrowers who agreed to share their repayment summary. Full addresses appear only when they separately consented.</p>
+            </div><span className="muted text-sm">{communityBorrowers.length} borrower profiles</span>
+          </div>
+          {credentialMessage && <p role="status" className="mt-4 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{credentialMessage}</p>}
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {communityBorrowers.map((borrower) => {
+              const requestStatus = credentialRequests[borrower.borrower_id];
+              return <article key={borrower.borrower_id} className="rounded-xl border border-white/10 bg-white/[.03] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div><h3 className="font-bold">{borrower.display_name}</h3><p className="muted mt-1 text-xs">{borrower.completed_loans} completed loans</p></div>
+                  <div className="text-right"><p className="font-bold text-amber-300">{borrower.average_rating === null ? "No rating" : Number(borrower.average_rating).toFixed(2) + " / 5 ★"}</p><p className="muted mt-1 text-xs">{borrower.five_star_loans} five-star repayments</p></div>
+                </div>
+                <p className="mt-3 text-sm"><span className="muted">Address: </span>{borrower.full_address || "Not shared by borrower"}</p>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => void askCeoToShareCredentials(borrower.borrower_id)} disabled={Boolean(requestStatus && ["pending","approved","released"].includes(requestStatus)) || credentialBusyId === borrower.borrower_id} className="btn btn-outline px-3 py-2 text-xs">
+                    {credentialBusyId === borrower.borrower_id ? "Sending…" : requestStatus === "pending" ? "Request pending" : requestStatus === "approved" ? "CEO approved, awaiting consent" : requestStatus === "released" ? "Credentials approved" : requestStatus === "rejected" ? "Request again" : "Ask CEO to share credentials"}
+                  </button>
+                </div>
+              </article>;
+            })}
+            {communityBorrowers.length === 0 && <p className="muted rounded-xl border border-white/10 p-6 text-center text-sm md:col-span-2">No borrowers have opted into the shared directory yet.</p>}
+          </div>
+        </section>
+      )}
+
+      {profile?.role === "borrower" && borrowerCredentialRequests.length > 0 && (
+        <section className="card mt-7">
+          <h2 className="text-xl font-bold">Credential sharing requests</h2>
+          <p className="muted mt-2 text-sm">A lender has asked CREDEE to coordinate credential sharing. Your consent is required before any credentials can be released.</p>
+          <div className="mt-4 space-y-3">
+            {borrowerCredentialRequests.map((request) => <div key={request.id} className="rounded-xl border border-white/10 p-4">
+              <p className="text-sm font-semibold">Request status: <span className="capitalize text-amber-300">{request.status}</span></p>
+              <p className="muted mt-1 text-xs">{new Date(request.created_at).toLocaleString("en-PH")}</p>
+              {request.status === "approved" && <button type="button" onClick={() => void consentToCredentialSharing(request)} disabled={credentialBusyId === request.id} className="btn btn-primary mt-3 px-3 py-2 text-xs">{credentialBusyId === request.id ? "Saving…" : "I consent to credential sharing"}</button>}
+            </div>)}
+          </div>
+          {credentialMessage && <p role="status" className="mt-3 text-sm text-violet-200">{credentialMessage}</p>}
+        </section>
+      )}
       <section className="card mt-7">
         <div className="flex items-center gap-2"><Clock3 className="text-violet-300" /><h2 className="text-xl font-bold">Loan records</h2></div>
         {profile?.role === "lender" && <p className="muted mt-2 text-sm leading-6">When you have received the borrower's full payment, tick the box to record it. CREDEE will automatically complete the loan and calculate the borrower's stars from the due date. Only tick it after the full payment has actually been received.</p>}
