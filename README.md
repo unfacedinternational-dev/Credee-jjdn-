@@ -5,7 +5,7 @@ A Next.js + Supabase starter for a consent-aware lending and repayment records p
 ## Stack
 - Next.js 15 App Router + TypeScript
 - Tailwind CSS
-- Supabase Auth (cookie-based SSR) and Postgres with Row Level Security
+- Supabase phone/password Auth (cookie-based SSR) and Postgres with Row Level Security
 - Vercel deployment-ready
 
 ## Run locally
@@ -13,7 +13,7 @@ A Next.js + Supabase starter for a consent-aware lending and repayment records p
 2. Copy `.env.example` to `.env.local`.
 3. Create a Supabase project and add its Project URL and publishable key to `.env.local`.
 4. In Supabase SQL Editor, run `supabase/migrations/202611100001_initial_schema.sql`.
-5. Enable email authentication in Supabase Auth. Configure the site URL and redirect URLs for localhost and your deployed domain.
+5. Enable Phone authentication in Supabase Auth and configure an SMS provider/template. Configure the site URL and redirect URLs for localhost and your deployed domain.
 6. Run `npm install`, then `npm run dev`.
 
 ## Supabase setup
@@ -26,7 +26,8 @@ The app expects:
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
 ## Current implementation status
-- Public marketing landing page and lender/borrower registration/sign-in UI are implemented.
+- Compact borrower-first marketing landing page and lender/borrower mobile-number registration/sign-in UI are implemented.
+- New member registration uses SMS phone verification when confirmation is enabled; CEO access remains restricted and uses its provisioned email credentials.
 - Supabase cookie-based client setup is implemented.
 - Authenticated dashboard shell and recent loan list are implemented.
 - Initial database schema and RLS policies are included.
