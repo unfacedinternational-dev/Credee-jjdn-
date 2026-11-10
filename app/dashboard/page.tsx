@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2 } from "lucide-react";
 
-type Profile = { display_name: string | null; role: "lender" | "borrower"; directory_consent: boolean };
+type Profile = { display_name: string | null; role: "lender" | "borrower"; directory_consent: boolean; address_sharing_consent: boolean };
 type BorrowerDirectoryItem = { borrower_id: string; display_name: string; full_address: string | null; completed_loans: number; average_rating: number | null; five_star_loans: number; late_loans: number; contributing_lenders: number };
 type BorrowerCredentialRequest = { id: string; reason: string; requested_fields: string[]; status: string; created_at: string };
 type Loan = {
@@ -23,6 +23,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [consent, setConsent] = useState(false);
+  const [addressConsent, setAddressConsent] = useState(false);
   const [consentMessage, setConsentMessage] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -43,7 +44,7 @@ export default function Dashboard() {
       if (!user) { router.replace("/auth"); return; }
       setEmail(user.email ?? "");
       const { data: p, error: pe } = await supabase.from("profiles")
-        .select("display_name,role,roles,directory_consent").eq("id", user.id).single();
+        .select("display_name,role,roles,directory_consent,address_sharing_consent").eq("id", user.id).single();
       if (pe || !p) {
         setError("Your profile is not ready yet. Please contact Customer Service.");
         setLoading(false);
@@ -57,6 +58,7 @@ export default function Dashboard() {
       if (!activePortal || !availableRoles.includes(activePortal)) { router.replace("/auth?error=role"); return; }
       setProfile({ ...p, role: activePortal } as Profile);
       setConsent(Boolean(p.directory_consent));
+      setAddressConsent(Boolean(p.address_sharing_consent));
       if (activePortal === "lender") {
         const { data: directoryData } = await supabase.rpc("get_shared_account_directory");
         setCommunityBorrowers((directoryData?.borrowers ?? []) as BorrowerDirectoryItem[]);
@@ -86,6 +88,14 @@ export default function Dashboard() {
     setConsentMessage(!consent ? "Your borrower summary is now shared in the community directory." : "Your borrower summary is no longer shared.");
   }
 
+  async function saveAddressConsent() {
+    const db = createClient();
+    const nextValue = !addressConsent;
+    const { error } = await db.from("profiles").update({ address_sharing_consent: nextValue }).eq("id", (await db.auth.getUser()).data.user?.id);
+    if (error) { setConsentMessage(error.message); return; }
+    setAddressConsent(nextValue);
+    setConsentMessage(nextValue ? "Your full address can now be shown to registered CREDEE lenders." : "Your full address is no longer shared in the lender directory.");
+  }
   async function markPaymentReceived(loan: Loan, checked: boolean) {
     if (!checked || profile?.role !== "lender" || loan.status === "completed") return;
     const confirmed = window.confirm("Confirm that you have received the borrower's FULL payment for this loan? This will complete the loan and calculate the borrower's stars based on the payment date.");
@@ -168,12 +178,19 @@ export default function Dashboard() {
       {profile?.role === "borrower" && (
         <section className="card mt-7">
           <h2 className="text-xl font-bold">Borrower directory consent</h2>
-          <p className="muted mt-2 text-sm leading-6">If enabled, all registered CREDEE members can see a limited summary of your completed loan ratings. Your phone, email, address, ID photos and agreements are not shown in the directory.</p>
+          <p className="muted mt-2 text-sm leading-6">You control two separate sharing settings. Your repayment summary can be shown to CREDEE members, and your full address can be shown to registered lenders only if you separately agree.</p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button type="button" onClick={saveConsent} className="btn btn-outline">{consent ? "Turn off sharing" : "Share my repayment summary"}</button>
             <span className="muted text-xs">Current status: {consent ? "Sharing enabled" : "Not shared"}</span>
           </div>
           {consentMessage && <p className="mt-3 text-sm text-violet-200">{consentMessage}</p>}
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="font-semibold">Share my full address with lenders</p><p className="muted mt-1 text-xs">This is separate from repayment-summary sharing.</p></div>
+              <button type="button" onClick={saveAddressConsent} className="btn btn-outline">{addressConsent ? "Stop sharing address" : "Share my address"}</button>
+            </div>
+            <p className="muted mt-2 text-xs">Current status: {addressConsent ? "Address sharing enabled" : "Address private"}</p>
+          </div>
         </section>
       )}
 
