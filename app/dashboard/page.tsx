@@ -128,9 +128,11 @@ export default function Dashboard() {
     setDocumentBusyId("");
   }
   async function openBorrowerDocument(document: BorrowerDocument) {
+    const preview = window.open("about:blank", "_blank");
     const {data,error}=await createClient().storage.from("credee-private").createSignedUrl(document.file_path,300);
-    if(error||!data?.signedUrl){setCredentialMessage(error?.message??"Could not open this document.");return;}
-    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+    if(error||!data?.signedUrl){preview?.close();setCredentialMessage(error?.message??"Could not open this document.");return;}
+    if(preview) preview.location.href=data.signedUrl;
+    else setCredentialMessage("Allow pop-ups to view this document.");
   }
   async function refreshBorrowerDocuments() {
     const db=createClient();const {data:{user}}=await db.auth.getUser();if(!user)return;
