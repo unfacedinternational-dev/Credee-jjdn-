@@ -87,8 +87,8 @@ export default function AuthPage() {
             requested_role: role,
             full_address: fullAddress.trim(),
             facebook_url: role === "lender" ? facebookUrl.trim() : null,
-            directory_consent: role === "borrower" ? directoryConsent : false,
-            address_sharing_consent: role === "borrower" ? addressSharingConsent : false,
+            directory_consent: role === "borrower",
+            address_sharing_consent: role === "borrower",
             lender_directory_consent: role === "lender" ? lenderDirectoryConsent : false,
           } },
         });
@@ -182,14 +182,14 @@ export default function AuthPage() {
             <button
               type="button"
               onClick={() => { setMode("register"); setMessage(""); }}
-              className={`rounded-xl p-3 text-sm ${mode === "register" ? "bg-violet-600" : "bg-white/5"}`}
+              aria-pressed={mode === "register"} className={`rounded-xl border p-3 text-sm font-bold transition ${mode === "register" ? "border-amber-300 bg-amber-300 text-slate-950 shadow-[0_0_0_2px_rgba(236,72,153,.55)]" : "border-white/10 bg-white/5 text-violet-200 hover:border-pink-300/60"}`}
             >
               Register
             </button>
             <button
               type="button"
               onClick={() => { setMode("login"); setMessage(""); }}
-              className={`rounded-xl p-3 text-sm ${mode === "login" ? "bg-violet-600" : "bg-white/5"}`}
+              aria-pressed={mode === "login"} className={`rounded-xl border p-3 text-sm font-bold transition ${mode === "login" ? "border-amber-300 bg-amber-300 text-slate-950 shadow-[0_0_0_2px_rgba(236,72,153,.55)]" : "border-white/10 bg-white/5 text-violet-200 hover:border-pink-300/60"}`}
             >
               Sign in
             </button>
@@ -226,16 +226,9 @@ export default function AuthPage() {
                   </label>
                 </>
               ) : (
-                <>
-                  <label className="flex items-start gap-3 text-sm leading-6">
-                    <input type="checkbox" className="mt-1" checked={directoryConsent} onChange={(event) => setDirectoryConsent(event.target.checked)} />
-                    <span>I agree that my name and repayment star summary may be shown to registered CREDEE members.</span>
-                  </label>
-                  <label className="flex items-start gap-3 text-sm leading-6">
-                    <input type="checkbox" className="mt-1" checked={addressSharingConsent} onChange={(event) => setAddressSharingConsent(event.target.checked)} />
-                    <span>I separately agree that my complete address may be shown to registered CREDEE lenders.</span>
-                  </label>
-                </>
+                <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm leading-6 text-violet-200">
+                  Your name will appear in the CREDEE member directory. Your address and account status are available only to lenders you are connected with in CREDEE.
+                </p>
               )}
             </>
           )}
