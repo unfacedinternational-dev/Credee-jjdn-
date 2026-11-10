@@ -1,4 +1,5 @@
 -- Enable phone-number profiles for password-based member authentication.
+alter table public.profiles add column if not exists phone text;
 -- Existing email-created accounts keep their current auth identity; only new phone signups
 -- automatically populate profiles.phone through the auth trigger.
 
