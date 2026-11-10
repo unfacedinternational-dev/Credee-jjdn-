@@ -1,32 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PRIVATE_PREFIXES = ["/lender", "/borrower", "/ceo"];
-
-function copyAuthCookies(source: NextResponse, destination: NextResponse) {
-  destination.cookies.setAll(source.cookies.getAll());
-  for (const header of ["cache-control", "expires", "pragma"]) {
-    const value = source.headers.get(header);
-    if (value) destination.headers.set(header, value);
-  }
-  return destination;
-}
-
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
-  const pathname = request.nextUrl.pathname;
-  const isPrivateRoute = PRIVATE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-  // Fail closed for private routes if Supabase is not configured.
-  if (!supabaseUrl || !supabaseKey) {
-    if (isPrivateRoute) {
-      return NextResponse.redirect(new URL("/auth", request.url));
-    }
-    return response;
-  }
+  // Allow public pages to render while local environment variables are not configured.
+  if (!supabaseUrl || !supabaseKey) return response;
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
@@ -36,54 +18,71 @@ export async function middleware(request: NextRequest) {
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options)
+        );
       },
     },
   });
 
-  // Verify the token and refresh it when needed. Do not trust getSession()
-  // for authorization because it reads the cookie without validating it.
+  // getClaims validates the session token and refreshes it when necessary.
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
-  const isAuthenticated = !claimsError && Boolean(claimsData?.claims?.sub);
+  const userId = claimsData?.claims?.sub;
+  const path = request.nextUrl.pathname;
+  const isLenderRoute = path.startsWith("/lender");
+  const isBorrowerRoute = path.startsWith("/borrower");
+  const isCeoRoute = path.startsWith("/ceo");
+  const isProtectedRoute = isLenderRoute || isBorrowerRoute || isCeoRoute;
 
-  if (isPrivateRoute && !isAuthenticated) {
-    return copyAuthCookies(response, NextResponse.redirect(new URL("/auth", request.url)));
+  function redirectWithCookies(destination: URL) {
+    const redirectResponse = NextResponse.redirect(destination);
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
   }
 
-  if (!isAuthenticated) return response;
+  if (claimsError || !userId) {
+    if (isProtectedRoute) {
+      return redirectWithCookies(new URL("/auth", request.url));
+    }
+    return response;
+  }
 
-  const userId = claimsData!.claims.sub as string;
+  if (!isProtectedRoute) return response;
+
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", userId)
     .maybeSingle();
 
-  // Fail closed if the role cannot be confirmed.
-  if (isPrivateRoute && (profileError || !profile?.role)) {
-    return copyAuthCookies(response, NextResponse.redirect(new URL("/auth?error=profile", request.url)));
+  if (profileError || !profile) {
+    return redirectWithCookies(new URL("/auth?error=profile", request.url));
   }
 
-  const role = profile?.role as string | undefined;
-  let destination: string | null = null;
+  const role = profile.role;
+  const allowed =
+    (isLenderRoute && (role === "lender" || role === "ceo")) ||
+    (isBorrowerRoute && (role === "borrower" || role === "ceo")) ||
+    (isCeoRoute && role === "ceo");
 
-  if (pathname.startsWith("/ceo") && role !== "ceo") {
-    destination = role === "lender" ? "/lender/dashboard" : role === "borrower" ? "/borrower/portal" : "/auth";
-  } else if (pathname.startsWith("/lender") && role !== "lender" && role !== "ceo") {
-    destination = role === "borrower" ? "/borrower/portal" : "/auth";
-  } else if (pathname.startsWith("/borrower") && role !== "borrower" && role !== "ceo") {
-    destination = role === "lender" ? "/lender/dashboard" : "/auth";
-  }
+  if (!allowed) {
+    const destination =
+      role === "lender"
+        ? "/lender/dashboard"
+        : role === "borrower"
+          ? "/borrower/portal"
+          : "/auth?error=role";
 
-  if (destination) {
-    return copyAuthCookies(response, NextResponse.redirect(new URL(destination, request.url)));
+    return redirectWithCookies(new URL(destination, request.url));
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };
