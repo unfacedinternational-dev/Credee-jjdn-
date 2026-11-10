@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2 } from "lucide-react";
 
@@ -19,7 +19,6 @@ type Loan = {
 
 export default function Dashboard() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [consent, setConsent] = useState(false);
   const [consentMessage, setConsentMessage] = useState("");
@@ -44,7 +43,7 @@ export default function Dashboard() {
         return;
       }
       const availableRoles: string[] = Array.isArray(p.roles) ? p.roles : [p.role];
-      const requestedPortal = searchParams.get("portal");
+      const requestedPortal = new URLSearchParams(window.location.search).get("portal");
       const activePortal = requestedPortal === "lender" || requestedPortal === "borrower"
         ? requestedPortal
         : (p.role === "lender" || p.role === "borrower" ? p.role : null);
@@ -58,7 +57,7 @@ export default function Dashboard() {
       setLoans((l ?? []) as Loan[]);
       setLoading(false);
     })();
-  }, [router, searchParams]);
+  }, [router]);
 
   async function saveConsent() {
     const db = createClient();
