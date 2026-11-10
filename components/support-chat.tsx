@@ -14,11 +14,17 @@ export default function SupportChat({admin=false}:{admin?:boolean}) {
  const loadConversations=useCallback(async(silent=false)=>{
   const db=createClient(); if(!silent)setLoading(true);
   const {data:{user}}=await db.auth.getUser(); if(!user){router.replace("/auth");return;} setUserId(user.id);
-  const {data:profile}=await db.from("profiles").select("role,suspended_at").eq("id",user.id).single();
-  const currentRole=profile?.role as Role|undefined;
-  if(!currentRole||profile?.suspended_at||(admin&&currentRole!=="ceo")||(!admin&&!["lender","borrower","ceo"].includes(currentRole))){router.replace("/auth?error=role");return;}
+  const {data:profile}=await db.from("profiles").select("role,roles,suspended_at").eq("id",user.id).single();
+  const availableRoles: string[] = Array.isArray(profile?.roles) ? profile.roles : [profile?.role];
+  const requestedPortal = new URLSearchParams(window.location.search).get("portal");
+  const customerRole: Role | undefined =
+   requestedPortal === "lender" && availableRoles.includes("lender") ? "lender" :
+   requestedPortal === "borrower" && availableRoles.includes("borrower") ? "borrower" :
+   profile?.role === "lender" || profile?.role === "borrower" ? profile.role :
+   availableRoles.includes("lender") ? "lender" : availableRoles.includes("borrower") ? "borrower" : undefined;
+  const currentRole = admin ? (availableRoles.includes("ceo") ? "ceo" : undefined) : customerRole;
+  if(!currentRole||profile?.suspended_at){router.replace("/auth?error=role");return;}
   setRole(currentRole);
-  if (!admin && currentRole === "ceo") { router.replace("/ceo/customer-service"); return; }
   let query=db.from("support_conversations").select("id,user_id,subject,status,created_at,last_message_at").order("last_message_at",{ascending:false});
   if(!admin)query=query.eq("user_id",user.id);
   const {data,error}=await query; if(error){setNotice(error.message);setLoading(false);return;}
@@ -36,7 +42,7 @@ export default function SupportChat({admin=false}:{admin?:boolean}) {
  async function closeConversation(){if(!admin||!selected)return;const {error}=await createClient().from("support_conversations").update({status:"closed"}).eq("id",selected.id);if(error)setNotice(error.message);else await loadConversations(true);}
  if(loading)return <main className="container py-20 text-center text-violet-200">Loading customer service…</main>;
  return <main className="container min-h-screen py-8">
-  <header className="mb-7 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5"><div><a href={admin?"/ceo/super-admin":"/dashboard"} className="inline-flex items-center gap-2 text-sm text-violet-300 no-underline"><ArrowLeft size={15}/>{admin?"Super Admin":"Back to workspace"}</a><h1 className="mt-3 flex items-center gap-2 text-3xl font-bold"><MessageCircle className="text-amber-300"/>{admin?"Customer Service Inbox":"Customer Service"}</h1><p className="muted mt-2">{admin?"Private support conversations from CREDEE accounts. Replies are saved in each conversation.":"Send a message to CREDEE Customer Service. Your conversation history stays saved in your account."}</p></div><button className="btn btn-outline" onClick={()=>{void loadConversations();void loadMessages();}}><RefreshCw size={16} className="mr-2"/>Refresh</button></header>
+  <header className="mb-7 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5"><div><a href={admin?"/ceo/super-admin":"/dashboard?portal="+role} className="inline-flex items-center gap-2 text-sm text-violet-300 no-underline"><ArrowLeft size={15}/>{admin?"Super Admin":"Back to workspace"}</a><h1 className="mt-3 flex items-center gap-2 text-3xl font-bold"><MessageCircle className="text-amber-300"/>{admin?"Customer Service Inbox":"Customer Service"}</h1><p className="muted mt-2">{admin?"Private support conversations from CREDEE accounts. Replies are saved in each conversation.":"Send a message to CREDEE Customer Service. Your conversation history stays saved in your account."}</p></div><button className="btn btn-outline" onClick={()=>{void loadConversations();void loadMessages();}}><RefreshCw size={16} className="mr-2"/>Refresh</button></header>
   {notice&&<div role="alert" className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100">{notice}</div>}
   <div className="grid min-h-[560px] gap-5 lg:grid-cols-[320px_1fr]">
    <aside className="card"><div className="flex items-center justify-between gap-3"><h2 className="font-bold">{admin?"All conversations":"Your conversations"}</h2>{!admin&&<button onClick={startConversation} disabled={busy} className="btn btn-primary px-3 py-2 text-xs">New message</button>}</div><div className="mt-4 space-y-2">{conversations.map(c=><button key={c.id} onClick={()=>setSelectedId(c.id)} className={`w-full rounded-xl border p-3 text-left ${selectedId===c.id?"border-violet-400 bg-violet-500/15":"border-white/10 bg-white/[.03]"}`}><div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{admin?names[c.user_id]||"CREDEE user":c.subject}</span><span className={`text-[10px] uppercase ${c.status==="open"?"text-emerald-300":"text-slate-400"}`}>{c.status}</span></div><p className="muted mt-1 text-xs">{new Date(c.last_message_at).toLocaleString("en-PH")}</p></button>)}{conversations.length===0&&<p className="muted py-8 text-center text-sm">{admin?"No support messages have arrived yet.":"No messages yet. Start a conversation whenever you need help."}</p>}</div></aside>
