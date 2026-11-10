@@ -176,7 +176,9 @@ export default function AuthPage() {
           type="button"
           onClick={handleBrandTap}
           aria-label="CREDEE"
-          className="text-left text-lg font-black text-white"
+          title="CREDEE"
+          className="text-left text-3xl font-black tracking-[0.18em] text-amber-300 drop-shadow-[0_2px_0_rgba(236,72,153,0.95)] transition hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-pink-400"
+          style={{ WebkitTextStroke: "1px #ec4899", textShadow: "0 0 12px rgba(236,72,153,.35), 0 2px 0 #ec4899" }}
         >
           CREDEE
         </button>
