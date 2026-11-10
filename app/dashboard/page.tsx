@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2 } from "lucide-react";
+import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2, Search, UploadCloud, FileText, ExternalLink } from "lucide-react";
 
 type Profile = { display_name: string | null; role: "lender" | "borrower"; directory_consent: boolean; address_sharing_consent: boolean; full_address: string | null; facebook_url: string | null; lender_directory_consent: boolean };
 type BorrowerDirectoryItem = { borrower_id: string; display_name: string; full_address: string | null; completed_loans: number; average_rating: number | null; five_star_loans: number; late_loans: number; contributing_lenders: number };
-type BorrowerCredentialRequest = { id: string; reason: string; requested_fields: string[]; status: string; created_at: string };
+type AssignedBorrower = { borrower_id: string; display_name: string; full_address: string | null; current_status: string; loan_count: number }; type BorrowerSearchResult = { borrower_id: string; display_name: string }; type BorrowerDocument = { id: string; lender_id: string; borrower_id: string; file_path: string; file_name: string; mime_type: string; file_size: number; created_at: string };
 type Loan = {
   id: string;
   borrower_id: string;
@@ -22,23 +22,24 @@ type Loan = {
 export default function Dashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [consent, setConsent] = useState(false);
-  const [addressConsent, setAddressConsent] = useState(false);
   const [profileAddress, setProfileAddress] = useState("");
   const [profileFacebook, setProfileFacebook] = useState("");
   const [lenderDirectoryConsent, setLenderDirectoryConsent] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
-  const [consentMessage, setConsentMessage] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [error, setError] = useState("");
   const [markingId, setMarkingId] = useState("");
   const [paymentMessage, setPaymentMessage] = useState("");
-  const [communityBorrowers, setCommunityBorrowers] = useState<BorrowerDirectoryItem[]>([]);
+  const [assignedBorrowers, setAssignedBorrowers] = useState<AssignedBorrower[]>([]);
+  const [borrowerSearch, setBorrowerSearch] = useState("");
+  const [borrowerSearchResults, setBorrowerSearchResults] = useState<BorrowerSearchResult[]>([]);
+  const [borrowerSearchMessage, setBorrowerSearchMessage] = useState("");
+  const [documents, setDocuments] = useState<BorrowerDocument[]>([]);
+  const [documentBusyId, setDocumentBusyId] = useState("");
   const [credentialRequests, setCredentialRequests] = useState<Record<string, string>>({});
-  const [borrowerCredentialRequests, setBorrowerCredentialRequests] = useState<BorrowerCredentialRequest[]>([]);
   const [credentialMessage, setCredentialMessage] = useState("");
   const [credentialBusyId, setCredentialBusyId] = useState("");
 
@@ -62,22 +63,19 @@ export default function Dashboard() {
         : (p.role === "lender" || p.role === "borrower" ? p.role : null);
       if (!activePortal || !availableRoles.includes(activePortal)) { router.replace("/auth?error=role"); return; }
       setProfile({ ...p, role: activePortal } as Profile);
-      setConsent(Boolean(p.directory_consent));
-      setAddressConsent(Boolean(p.address_sharing_consent));
       setProfileAddress(p.full_address ?? "");
       setProfileFacebook(p.facebook_url ?? "");
       setLenderDirectoryConsent(Boolean(p.lender_directory_consent));
       if (activePortal === "lender") {
-        const { data: directoryData } = await supabase.rpc("get_shared_account_directory");
-        setCommunityBorrowers((directoryData?.borrowers ?? []) as BorrowerDirectoryItem[]);
+        const { data: assigned } = await supabase.rpc("get_lender_borrowers");
+        setAssignedBorrowers((assigned ?? []) as AssignedBorrower[]);
         const { data: requestRows } = await supabase.from("credential_requests").select("borrower_id,status,created_at").eq("lender_id", user.id).order("created_at", { ascending: false });
         const requestMap: Record<string, string> = {};
         (requestRows ?? []).forEach((request: { borrower_id: string; status: string }) => { if (!requestMap[request.borrower_id]) requestMap[request.borrower_id] = request.status; });
         setCredentialRequests(requestMap);
-      } else {
-        const { data: requestRows } = await supabase.from("credential_requests").select("id,reason,requested_fields,status,created_at").eq("borrower_id", user.id).order("created_at", { ascending: false });
-        setBorrowerCredentialRequests((requestRows ?? []) as BorrowerCredentialRequest[]);
       }
+      const { data: documentRows } = await supabase.from("borrower_documents").select("id,lender_id,borrower_id,file_path,file_name,mime_type,file_size,created_at").eq(activePortal === "lender" ? "lender_id" : "borrower_id", user.id).order("created_at", { ascending: false });
+      setDocuments((documentRows ?? []) as BorrowerDocument[]);
       const { data: l, error: loanError } = await supabase.from("loans")
         .select("id,borrower_id,principal_amount,interest_rate,due_date,status,created_at,rating")
         .order("created_at", { ascending: false }).limit(50);
@@ -98,23 +96,51 @@ export default function Dashboard() {
     setProfileMessage(error ? error.message : "Your profile details have been saved.");
     setProfileSaving(false);
   }
-  async function saveConsent() {
-    const db = createClient();
-    const { error } = await db.from("profiles").update({ directory_consent: !consent })
-      .eq("id", (await db.auth.getUser()).data.user?.id);
-    if (error) { setConsentMessage(error.message); return; }
-    setConsent(!consent);
-    setConsentMessage(!consent ? "Your borrower summary is now shared in the community directory." : "Your borrower summary is no longer shared.");
+  async function refreshAssignedBorrowers() {
+    const { data, error } = await createClient().rpc("get_lender_borrowers");
+    if (error) setBorrowerSearchMessage(error.message);
+    else setAssignedBorrowers((data ?? []) as AssignedBorrower[]);
+  }
+  async function searchBorrowers() {
+    setBorrowerSearchMessage("");
+    if (borrowerSearch.trim().length < 2) { setBorrowerSearchResults([]); setBorrowerSearchMessage("Enter at least two letters to search."); return; }
+    const { data, error } = await createClient().rpc("search_borrowers_for_lender", { p_query: borrowerSearch.trim() });
+    if (error) setBorrowerSearchMessage(error.message);
+    else setBorrowerSearchResults((data ?? []) as BorrowerSearchResult[]);
+  }
+  async function addBorrower(borrower: BorrowerSearchResult) {
+    const db = createClient(); const { data: { user } } = await db.auth.getUser(); if (!user) return;
+    const { error } = await db.from("lender_borrowers").insert({ lender_id: user.id, borrower_id: borrower.borrower_id });
+    if (error && !error.message.toLowerCase().includes("duplicate")) setBorrowerSearchMessage(error.message);
+    else { setBorrowerSearchMessage(borrower.display_name + " has been added to your borrower list."); setBorrowerSearchResults(current => current.filter(item => item.borrower_id !== borrower.borrower_id)); await refreshAssignedBorrowers(); }
+  }
+  async function uploadBorrowerDocument(borrowerId: string, file?: File) {
+    if (!file) return;
+    if (!["application/pdf","image/jpeg","image/png","image/webp"].includes(file.type)) { setCredentialMessage("Upload a PDF, JPG, PNG or WebP file."); return; }
+    if (file.size > 10*1024*1024) { setCredentialMessage("Each document must be 10 MB or smaller."); return; }
+    setDocumentBusyId(borrowerId); setCredentialMessage("");
+    const db=createClient(); const {data:{user}}=await db.auth.getUser();
+    if(!user){setCredentialMessage("Please sign in again.");setDocumentBusyId("");return;}
+    const documentId=crypto.randomUUID(); const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(-100)||"document";
+    const filePath=user.id+"/"+borrowerId+"/"+documentId+"-"+safeName;
+    const {error:metadataError}=await db.from("borrower_documents").insert({id:documentId,lender_id:user.id,borrower_id:borrowerId,file_path:filePath,file_name:file.name,mime_type:file.type,file_size:file.size});
+    if(metadataError){setCredentialMessage(metadataError.message);setDocumentBusyId("");return;}
+    const {error:uploadError}=await db.storage.from("credee-private").upload(filePath,file,{contentType:file.type,upsert:false,cacheControl:"60"});
+    if(uploadError){await db.from("borrower_documents").delete().eq("id",documentId);setCredentialMessage(uploadError.message);}
+    else{const {data:rows}=await db.from("borrower_documents").select("id,lender_id,borrower_id,file_path,file_name,mime_type,file_size,created_at").eq("lender_id",user.id).order("created_at",{ascending:false});setDocuments((rows??[]) as BorrowerDocument[]);setCredentialMessage("Document uploaded. The borrower can view it after CEO approval.");}
+    setDocumentBusyId("");
+  }
+  async function openBorrowerDocument(document: BorrowerDocument) {
+    const {data,error}=await createClient().storage.from("credee-private").createSignedUrl(document.file_path,300);
+    if(error||!data?.signedUrl){setCredentialMessage(error?.message??"Could not open this document.");return;}
+    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+  }
+  async function refreshBorrowerDocuments() {
+    const db=createClient();const {data:{user}}=await db.auth.getUser();if(!user)return;
+    const {data,error}=await db.from("borrower_documents").select("id,lender_id,borrower_id,file_path,file_name,mime_type,file_size,created_at").eq(profile?.role==="lender"?"lender_id":"borrower_id",user.id).order("created_at",{ascending:false});
+    if(error)setCredentialMessage(error.message);else setDocuments((data??[]) as BorrowerDocument[]);
   }
 
-  async function saveAddressConsent() {
-    const db = createClient();
-    const nextValue = !addressConsent;
-    const { error } = await db.from("profiles").update({ address_sharing_consent: nextValue }).eq("id", (await db.auth.getUser()).data.user?.id);
-    if (error) { setConsentMessage(error.message); return; }
-    setAddressConsent(nextValue);
-    setConsentMessage(nextValue ? "Your full address can now be shown to registered CREDEE lenders." : "Your full address is no longer shared in the lender directory.");
-  }
   async function markPaymentReceived(loan: Loan, checked: boolean) {
     if (!checked || profile?.role !== "lender" || loan.status === "completed") return;
     const confirmed = window.confirm("Confirm that you have received the borrower's FULL payment for this loan? This will complete the loan and calculate the borrower's stars based on the payment date.");
@@ -189,8 +215,7 @@ export default function Dashboard() {
 
       <div className="mt-10">
         <div className="eyebrow">{profile?.role ?? "Account"} workspace</div>
-        <h1 className="mt-2 text-3xl font-bold">Welcome, {profile?.display_name || email}</h1>
-        <p className="muted mt-2">{email}</p>
+        <h1 className="mt-2 text-3xl font-bold">Welcome, {profile?.display_name || "Member"}</h1>
       </div>
 
       <section className="card mt-7">
@@ -204,72 +229,38 @@ export default function Dashboard() {
         <button type="button" onClick={() => void saveMemberDetails()} disabled={profileSaving} className="btn btn-primary mt-4">{profileSaving ? "Saving…" : "Save profile details"}</button>
         {profileMessage && <p role="status" className="mt-3 text-sm text-violet-200">{profileMessage}</p>}
       </section>
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
+      <div className="mt-8 grid gap-4 md:grid-cols-2">
         <div className="card"><Users className="text-violet-300" /><p className="muted mt-4 text-sm">Account type</p><p className="mt-1 text-xl font-bold capitalize">{profile?.role}</p></div>
         <div className="card"><Wallet className="text-amber-300" /><p className="muted mt-4 text-sm">Loan records visible to your account</p><p className="mt-1 text-xl font-bold">{loans.length}</p></div>
-        <div className="card"><ShieldCheck className="text-emerald-300" /><p className="muted mt-4 text-sm">Privacy status</p><p className="mt-1 text-xl font-bold">Private by default</p></div>
       </div>
 
-      {profile?.role === "borrower" && (
-        <section className="card mt-7">
-          <h2 className="text-xl font-bold">Borrower directory consent</h2>
-          <p className="muted mt-2 text-sm leading-6">You control two separate sharing settings. Your repayment summary can be shown to CREDEE members, and your full address can be shown to registered lenders only if you separately agree.</p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={saveConsent} className="btn btn-outline">{consent ? "Turn off sharing" : "Share my repayment summary"}</button>
-            <span className="muted text-xs">Current status: {consent ? "Sharing enabled" : "Not shared"}</span>
-          </div>
-          {consentMessage && <p className="mt-3 text-sm text-violet-200">{consentMessage}</p>}
-          <div className="mt-5 border-t border-white/10 pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div><p className="font-semibold">Share my full address with lenders</p><p className="muted mt-1 text-xs">This is separate from repayment-summary sharing.</p></div>
-              <button type="button" onClick={saveAddressConsent} className="btn btn-outline">{addressConsent ? "Stop sharing address" : "Share my address"}</button>
-            </div>
-            <p className="muted mt-2 text-xs">Current status: {addressConsent ? "Address sharing enabled" : "Address private"}</p>
-          </div>
-        </section>
-      )}
+
 
       {profile?.role === "lender" && (
         <section className="card mt-7">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div><div className="eyebrow">Shared community</div><h2 className="mt-2 text-xl font-bold">Borrower directory</h2>
-              <p className="muted mt-2 text-sm">Borrowers who agreed to share their repayment summary. Full addresses appear only when they separately consented.</p>
-            </div><div className="flex items-center gap-3"><span className="muted text-sm">{communityBorrowers.length} borrower profiles</span><button type="button" onClick={() => void refreshBorrowerDirectory()} className="btn btn-outline px-3 py-2 text-xs">Refresh list</button></div>
-          </div>
-          {credentialMessage && <p role="status" className="mt-4 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{credentialMessage}</p>}
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {communityBorrowers.map((borrower) => {
-              const requestStatus = credentialRequests[borrower.borrower_id];
-              return <article key={borrower.borrower_id} className="rounded-xl border border-white/10 bg-white/[.03] p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div><h3 className="font-bold">{borrower.display_name}</h3><p className="muted mt-1 text-xs">{borrower.completed_loans} completed loans</p></div>
-                  <div className="text-right"><p className="font-bold text-amber-300">{borrower.average_rating === null ? "No rating" : Number(borrower.average_rating).toFixed(2) + " / 5 ★"}</p><p className="muted mt-1 text-xs">{borrower.five_star_loans} five-star repayments</p></div>
-                </div>
-                <p className="mt-3 text-sm"><span className="muted">Address: </span>{borrower.full_address || "Not shared by borrower"}</p>
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={() => void askCeoToShareCredentials(borrower.borrower_id)} disabled={Boolean(requestStatus && ["pending","approved","released"].includes(requestStatus)) || credentialBusyId === borrower.borrower_id} className="btn btn-outline px-3 py-2 text-xs">
-                    {credentialBusyId === borrower.borrower_id ? "Sending…" : requestStatus === "pending" ? "Request pending" : requestStatus === "approved" ? "CEO approved, awaiting consent" : requestStatus === "released" ? "Borrower consented" : requestStatus === "rejected" ? "Request again" : "Ask CEO to share credentials"}
-                  </button>
-                </div>
-              </article>;
-            })}
-            {communityBorrowers.length === 0 && <p className="muted rounded-xl border border-white/10 p-6 text-center text-sm md:col-span-2">No borrowers have opted into the shared directory yet.</p>}
+          <div className="flex flex-wrap items-end justify-between gap-3"><div><div className="eyebrow">Lender tools</div><h2 className="mt-2 text-xl font-bold">Add a borrower</h2><p className="muted mt-2 text-sm">Search registered CREDEE borrowers by name and add them to your private borrower list.</p></div><button type="button" onClick={()=>void refreshAssignedBorrowers()} className="btn btn-outline px-3 py-2 text-xs">Refresh list</button></div>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row"><div className="relative flex-1"><Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-violet-300"/><input className="field pl-10" value={borrowerSearch} onChange={e=>setBorrowerSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void searchBorrowers();}}} placeholder="Search borrower by full name"/></div><button type="button" onClick={()=>void searchBorrowers()} className="btn btn-primary"><Search size={16} className="mr-2"/>Search</button></div>
+          {borrowerSearchMessage&&<p role="status" className="mt-3 text-sm text-violet-200">{borrowerSearchMessage}</p>}
+          {borrowerSearchResults.length>0&&<div className="mt-3 space-y-2">{borrowerSearchResults.map(item=><div key={item.borrower_id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 p-3"><span className="font-semibold">{item.display_name}</span><button type="button" onClick={()=>void addBorrower(item)} className="btn btn-outline px-3 py-2 text-xs">Add to my borrowers</button></div>)}</div>}
+          <div className="mt-7 border-t border-white/10 pt-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-bold">My borrowers</h3><p className="muted mt-1 text-sm">Address and current loan status are shown in your connected lender workspace.</p></div><span className="muted text-sm">{assignedBorrowers.length} borrower(s)</span></div>
+            {credentialMessage&&<p role="status" className="mt-4 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{credentialMessage}</p>}
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {assignedBorrowers.map(borrower=>{const requestStatus=credentialRequests[borrower.borrower_id];const borrowerDocs=documents.filter(doc=>doc.borrower_id===borrower.borrower_id);return <article key={borrower.borrower_id} className="rounded-xl border border-white/10 bg-white/[.03] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-bold">{borrower.display_name}</h4><p className="muted mt-1 text-xs">{borrower.full_address||"Address not provided"}</p></div><span className="rounded-full bg-white/10 px-3 py-1 text-xs">{borrower.current_status}</span></div><p className="muted mt-2 text-xs">{borrower.loan_count} loan record(s)</p>
+                <div className="mt-4 flex flex-wrap items-center gap-2"><button type="button" onClick={()=>void askCeoToShareCredentials(borrower.borrower_id)} disabled={Boolean(requestStatus&&["pending","approved","released"].includes(requestStatus))||credentialBusyId===borrower.borrower_id} className="btn btn-outline px-3 py-2 text-xs">{credentialBusyId===borrower.borrower_id?"Sending…":requestStatus==="pending"?"CEO review pending":requestStatus==="approved"?"CEO approved":requestStatus==="released"?"CEO approved · borrower access enabled": "Request CEO document approval"}</button><label className="btn btn-primary cursor-pointer px-3 py-2 text-xs"><UploadCloud size={14} className="mr-2 inline"/>{documentBusyId===borrower.borrower_id?"Uploading…":"Upload document"}<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="hidden" disabled={documentBusyId===borrower.borrower_id} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadBorrowerDocument(borrower.borrower_id,file);e.currentTarget.value="";}}/></label></div>
+                <div className="mt-4 border-t border-white/10 pt-3"><p className="mb-2 text-xs font-semibold text-violet-200">Uploaded documents</p>{borrowerDocs.length===0?<p className="muted text-xs">No documents uploaded.</p>:borrowerDocs.map(doc=><button type="button" key={doc.id} onClick={()=>void openBorrowerDocument(doc)} className="flex w-full items-center gap-2 py-2 text-left text-xs text-sky-300 hover:underline"><FileText size={15}/><span className="min-w-0 flex-1 truncate">{doc.file_name}</span><ExternalLink size={13}/></button>)}</div>
+              </article>;})}
+              {assignedBorrowers.length===0&&<p className="muted rounded-xl border border-white/10 p-6 text-center text-sm md:col-span-2">You have not added any borrowers yet. Search above to add one.</p>}
+            </div>
           </div>
         </section>
       )}
 
-      {profile?.role === "borrower" && borrowerCredentialRequests.length > 0 && (
+
+      {profile?.role === "borrower" && (
         <section className="card mt-7">
-          <h2 className="text-xl font-bold">Credential sharing requests</h2>
-          <p className="muted mt-2 text-sm">A lender has asked CREDEE to coordinate credential sharing. Your consent is required before any credentials can be released.</p>
-          <div className="mt-4 space-y-3">
-            {borrowerCredentialRequests.map((request) => <div key={request.id} className="rounded-xl border border-white/10 p-4">
-              <p className="text-sm font-semibold">Request status: <span className="capitalize text-amber-300">{request.status}</span></p>
-              <p className="muted mt-1 text-xs">{new Date(request.created_at).toLocaleString("en-PH")}</p>
-              {request.status === "approved" && <button type="button" onClick={() => void consentToCredentialSharing(request)} disabled={credentialBusyId === request.id} className="btn btn-primary mt-3 px-3 py-2 text-xs">{credentialBusyId === request.id ? "Saving…" : "I consent to credential sharing"}</button>}
-            </div>)}
-          </div>
-          {credentialMessage && <p role="status" className="mt-3 text-sm text-violet-200">{credentialMessage}</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">My documents</h2><p className="muted mt-2 text-sm">Documents shared by your connected lender appear here after CEO approval. You can view or download them, but cannot change or delete them.</p></div><button type="button" onClick={()=>void refreshBorrowerDocuments()} className="btn btn-outline px-3 py-2 text-xs">Refresh documents</button></div>
+          {documents.length===0?<p className="muted mt-5 text-sm">No approved documents are available yet.</p>:<div className="mt-4 space-y-2">{documents.map(doc=><button type="button" key={doc.id} onClick={()=>void openBorrowerDocument(doc)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 p-3 text-left hover:bg-white/5"><FileText className="text-violet-300"/><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{doc.file_name}</span><span className="muted mt-1 block text-xs">{new Date(doc.created_at).toLocaleString("en-PH")}</span></span><ExternalLink size={15} className="text-sky-300"/></button>)}</div>}
         </section>
       )}
       <section className="card mt-7">
