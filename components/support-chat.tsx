@@ -18,6 +18,7 @@ export default function SupportChat({admin=false}:{admin?:boolean}) {
   const currentRole=profile?.role as Role|undefined;
   if(!currentRole||profile?.suspended_at||(admin&&currentRole!=="ceo")||(!admin&&!["lender","borrower","ceo"].includes(currentRole))){router.replace("/auth?error=role");return;}
   setRole(currentRole);
+  if (!admin && currentRole === "ceo") { router.replace("/ceo/customer-service"); return; }
   let query=db.from("support_conversations").select("id,user_id,subject,status,created_at,last_message_at").order("last_message_at",{ascending:false});
   if(!admin)query=query.eq("user_id",user.id);
   const {data,error}=await query; if(error){setNotice(error.message);setLoading(false);return;}
