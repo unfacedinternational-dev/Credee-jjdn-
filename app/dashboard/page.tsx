@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2, Search, UploadCloud, FileText, ExternalLink } from "lucide-react";
 
 type Profile = { display_name: string | null; role: "lender" | "borrower"; directory_consent: boolean; address_sharing_consent: boolean; full_address: string | null; facebook_url: string | null; lender_directory_consent: boolean };
-type BorrowerDirectoryItem = { borrower_id: string; display_name: string; full_address: string | null; completed_loans: number; average_rating: number | null; five_star_loans: number; late_loans: number; contributing_lenders: number };
 type AssignedBorrower = { borrower_id: string; display_name: string; full_address: string | null; current_status: string; loan_count: number }; type BorrowerSearchResult = { borrower_id: string; display_name: string }; type BorrowerDocument = { id: string; lender_id: string; borrower_id: string; file_path: string; file_name: string; mime_type: string; file_size: number; created_at: string };
 type Loan = {
   id: string;
@@ -27,7 +26,6 @@ export default function Dashboard() {
   const [lenderDirectoryConsent, setLenderDirectoryConsent] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
-  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [error, setError] = useState("");
@@ -48,7 +46,6 @@ export default function Dashboard() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.replace("/auth"); return; }
-      setEmail(user.email ?? "");
       const { data: p, error: pe } = await supabase.from("profiles")
         .select("display_name,role,roles,directory_consent,address_sharing_consent,full_address,facebook_url,lender_directory_consent").eq("id", user.id).single();
       if (pe || !p) {
@@ -159,11 +156,6 @@ export default function Dashboard() {
     setMarkingId("");
   }
 
-  async function refreshBorrowerDirectory() {
-    const { data, error } = await createClient().rpc("get_shared_account_directory");
-    if (error) setCredentialMessage(error.message);
-    else setCommunityBorrowers((data?.borrowers ?? []) as BorrowerDirectoryItem[]);
-  }
   async function askCeoToShareCredentials(borrowerId: string) {
     if (profile?.role !== "lender") return;
     setCredentialBusyId(borrowerId); setCredentialMessage("");
@@ -180,15 +172,6 @@ export default function Dashboard() {
     setCredentialBusyId("");
   }
 
-  async function consentToCredentialSharing(request: BorrowerCredentialRequest) {
-    setCredentialBusyId(request.id); setCredentialMessage("");
-    const { error } = await createClient().from("credential_requests")
-      .update({ borrower_consented_at: new Date().toISOString(), status: "released" })
-      .eq("id", request.id).eq("status", "approved");
-    if (error) setCredentialMessage(error.message);
-    else setBorrowerCredentialRequests((current) => current.map((item) => item.id === request.id ? { ...item, status: "released" } : item));
-    setCredentialBusyId("");
-  }
   async function logout() {
     const supabase = createClient();
     await supabase.auth.signOut();
