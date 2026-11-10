@@ -1,4 +1,172 @@
 "use client";
-import { useEffect,useState } from "react"; import { useRouter } from "next/navigation"; import { createClient } from "@/lib/supabase/client"; import { LogOut, ShieldCheck, Users, Wallet, Clock3 } from "lucide-react";
-type Profile={display_name:string|null;role:"lender"|"borrower"|"ceo";directory_consent:boolean};
-export default function Dashboard(){const router=useRouter();const [profile,setProfile]=useState<Profile|null>(null);const [consent,setConsent]=useState(false);const [consentMessage,setConsentMessage]=useState("");const [email,setEmail]=useState("");const [loading,setLoading]=useState(true);const [loans,setLoans]=useState<any[]>([]);const [error,setError]=useState("");useEffect(()=>{(async()=>{const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();if(!user){router.replace("/auth");return;}setEmail(user.email??"");const {data:p,error:pe}=await supabase.from("profiles").select("display_name,role,directory_consent").eq("id",user.id).single();if(pe){setError("Your profile is not ready yet. Apply the database migration in supabase/migrations, then sign out and sign in again.");setLoading(false);return;}setProfile(p as Profile);setConsent(Boolean(p.directory_consent));const {data:l}=await supabase.from("loans").select("id,principal_amount,interest_rate,due_date,status,created_at").order("created_at",{ascending:false}).limit(20);setLoans(l??[]);setLoading(false);})();},[router]);async function saveConsent(){const db=createClient();const {error}=await db.from("profiles").update({directory_consent:!consent}).eq("id",(await db.auth.getUser()).data.user?.id);if(error){setConsentMessage(error.message);return;}setConsent(!consent);setConsentMessage(!consent?"Your borrower summary is now shared in the community directory.":"Your borrower summary is no longer shared.");}async function logout(){const supabase=createClient();await supabase.auth.signOut();router.replace("/");router.refresh();}if(loading)return <main className="container py-20 text-center text-violet-200">Loading your secure workspace…</main>;return <main className="container min-h-screen py-8"><header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6"><div><div className="font-black">CREDIT<span className="text-violet-400">TRUST</span></div><p className="muted mt-1 text-sm">Private workspace</p></div><div className="flex gap-2"><a href="/directory" className="btn btn-outline">Community directory</a><button onClick={logout} className="btn btn-outline"><LogOut size={16} className="mr-2"/> Sign out</button></div></header>{error?<div className="card mt-10"><h1 className="text-2xl font-bold">Setup required</h1><p className="muted mt-3">{error}</p></div>:<><div className="mt-10"><div className="eyebrow">{profile?.role??"Account"} dashboard</div><h1 className="mt-2 text-3xl font-bold">Welcome, {profile?.display_name||email}</h1><p className="muted mt-2">{email}</p></div><div className="mt-8 grid gap-4 md:grid-cols-3"><div className="card"><Users className="text-violet-300"/><p className="muted mt-4 text-sm">Account type</p><p className="mt-1 text-xl font-bold capitalize">{profile?.role}</p></div><div className="card"><Wallet className="text-amber-300"/><p className="muted mt-4 text-sm">Loans available to your account</p><p className="mt-1 text-xl font-bold">{loans.length}</p></div><div className="card"><ShieldCheck className="text-emerald-300"/><p className="muted mt-4 text-sm">Privacy status</p><p className="mt-1 text-xl font-bold">Private by default</p></div></div><section className="card mt-7"><h2 className="text-xl font-bold">Borrower directory consent</h2><p className="muted mt-2 text-sm leading-6">If enabled, all registered CREDEE members can see a limited summary of your completed loan ratings. Your phone, email, address, ID photos and agreements are not shown in the directory.</p><div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={saveConsent} className="btn btn-outline">{consent?"Turn off sharing":"Share my repayment summary"}</button><span className="muted text-xs">Current status: {consent?"Sharing enabled":"Not shared"}</span></div>{consentMessage&&<p className="mt-3 text-sm text-violet-200">{consentMessage}</p>}</section><section className="card mt-7"><div className="flex items-center gap-2"><Clock3 className="text-violet-300"/><h2 className="text-xl font-bold">Recent loan records</h2></div>{loans.length===0?<p className="muted mt-5">No loan records are linked to this account yet.</p>:<div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="muted"><tr><th className="p-3">Principal</th><th className="p-3">Interest</th><th className="p-3">Due date</th><th className="p-3">Status</th></tr></thead><tbody>{loans.map(l=><tr key={l.id} className="border-t border-white/10"><td className="p-3">₱{Number(l.principal_amount).toLocaleString("en-PH")}</td><td className="p-3">{l.interest_rate}%</td><td className="p-3">{l.due_date}</td><td className="p-3 capitalize">{l.status}</td></tr>)}</tbody></table></div>}</section></>}</main>}
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { LogOut, ShieldCheck, Users, Wallet, Clock3, CheckCircle2 } from "lucide-react";
+
+type Profile = { display_name: string | null; role: "lender" | "borrower" | "ceo"; directory_consent: boolean };
+type Loan = {
+  id: string;
+  borrower_id: string;
+  principal_amount: number;
+  interest_rate: number;
+  due_date: string;
+  status: string;
+  created_at: string;
+  rating: number | null;
+};
+
+export default function Dashboard() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [consent, setConsent] = useState(false);
+  const [consentMessage, setConsentMessage] = useState("");
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [error, setError] = useState("");
+  const [markingId, setMarkingId] = useState("");
+  const [paymentMessage, setPaymentMessage] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/auth"); return; }
+      setEmail(user.email ?? "");
+      const { data: p, error: pe } = await supabase.from("profiles")
+        .select("display_name,role,directory_consent").eq("id", user.id).single();
+      if (pe || !p) {
+        setError("Your profile is not ready yet. Please contact Customer Service.");
+        setLoading(false);
+        return;
+      }
+      if (p.role === "ceo") { router.replace("/ceo/super-admin"); return; }
+      if (p.role !== "lender" && p.role !== "borrower") { router.replace("/auth"); return; }
+      setProfile(p as Profile);
+      setConsent(Boolean(p.directory_consent));
+      const { data: l, error: loanError } = await supabase.from("loans")
+        .select("id,borrower_id,principal_amount,interest_rate,due_date,status,created_at,rating")
+        .order("created_at", { ascending: false }).limit(50);
+      if (loanError) setError(loanError.message);
+      setLoans((l ?? []) as Loan[]);
+      setLoading(false);
+    })();
+  }, [router]);
+
+  async function saveConsent() {
+    const db = createClient();
+    const { error } = await db.from("profiles").update({ directory_consent: !consent })
+      .eq("id", (await db.auth.getUser()).data.user?.id);
+    if (error) { setConsentMessage(error.message); return; }
+    setConsent(!consent);
+    setConsentMessage(!consent ? "Your borrower summary is now shared in the community directory." : "Your borrower summary is no longer shared.");
+  }
+
+  async function markPaymentReceived(loan: Loan, checked: boolean) {
+    if (!checked || profile?.role !== "lender" || loan.status === "completed") return;
+    const confirmed = window.confirm("Confirm that you have received the borrower's FULL payment for this loan? This will complete the loan and calculate the borrower's stars based on the payment date.");
+    if (!confirmed) return;
+    setMarkingId(loan.id);
+    setPaymentMessage("");
+    const { data, error } = await createClient().rpc("mark_loan_paid", { p_loan_id: loan.id });
+    if (error) {
+      setPaymentMessage(error.message);
+    } else {
+      setLoans((current) => current.map((item) => item.id === loan.id
+        ? { ...item, status: "completed", rating: Number(data.rating) }
+        : item));
+      setPaymentMessage(`Payment recorded. Borrower rating: ${Number(data.rating).toFixed(0)} / 5 stars. ${Number(data.days_late) === 0 ? "Paid on or before the due date." : `Recorded ${data.days_late} day(s) late.`}`);
+    }
+    setMarkingId("");
+  }
+
+  async function logout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.replace("/");
+    router.refresh();
+  }
+
+  if (loading) return <main className="container py-20 text-center text-violet-200">Loading your secure workspace…</main>;
+
+  return (
+    <main className="container min-h-screen py-8">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
+        <div>
+          <div className="font-black text-amber-300">CREDEE</div>
+          <p className="muted mt-1 text-sm">Private workspace</p>
+        </div>
+        <div className="flex gap-2">
+          <a href="/directory" className="btn btn-outline">Community directory</a>
+          <button onClick={logout} className="btn btn-outline"><LogOut size={16} className="mr-2" /> Sign out</button>
+        </div>
+      </header>
+
+      {error && <div role="alert" className="card mt-8 text-sm text-amber-200">{error}</div>}
+
+      <div className="mt-10">
+        <div className="eyebrow">{profile?.role ?? "Account"} workspace</div>
+        <h1 className="mt-2 text-3xl font-bold">Welcome, {profile?.display_name || email}</h1>
+        <p className="muted mt-2">{email}</p>
+      </div>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-3">
+        <div className="card"><Users className="text-violet-300" /><p className="muted mt-4 text-sm">Account type</p><p className="mt-1 text-xl font-bold capitalize">{profile?.role}</p></div>
+        <div className="card"><Wallet className="text-amber-300" /><p className="muted mt-4 text-sm">Loan records visible to your account</p><p className="mt-1 text-xl font-bold">{loans.length}</p></div>
+        <div className="card"><ShieldCheck className="text-emerald-300" /><p className="muted mt-4 text-sm">Privacy status</p><p className="mt-1 text-xl font-bold">Private by default</p></div>
+      </div>
+
+      {profile?.role === "borrower" && (
+        <section className="card mt-7">
+          <h2 className="text-xl font-bold">Borrower directory consent</h2>
+          <p className="muted mt-2 text-sm leading-6">If enabled, all registered CREDEE members can see a limited summary of your completed loan ratings. Your phone, email, address, ID photos and agreements are not shown in the directory.</p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={saveConsent} className="btn btn-outline">{consent ? "Turn off sharing" : "Share my repayment summary"}</button>
+            <span className="muted text-xs">Current status: {consent ? "Sharing enabled" : "Not shared"}</span>
+          </div>
+          {consentMessage && <p className="mt-3 text-sm text-violet-200">{consentMessage}</p>}
+        </section>
+      )}
+
+      <section className="card mt-7">
+        <div className="flex items-center gap-2"><Clock3 className="text-violet-300" /><h2 className="text-xl font-bold">Loan records</h2></div>
+        {profile?.role === "lender" && <p className="muted mt-2 text-sm leading-6">When you have received the borrower's full payment, tick the box to record it. CREDEE will automatically complete the loan and calculate the borrower's stars from the due date. Only tick it after the full payment has actually been received.</p>}
+        {paymentMessage && <p role="status" className="mt-4 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{paymentMessage}</p>}
+        {loans.length === 0 ? <p className="muted mt-5">No loan records are linked to this account yet.</p> : (
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="muted"><tr>
+                {profile?.role === "lender" && <th className="p-3">Borrower account</th>}
+                <th className="p-3">Principal</th><th className="p-3">Interest</th><th className="p-3">Due date</th><th className="p-3">Status</th>
+                {profile?.role === "lender" && <th className="p-3">Payment received</th>}
+                <th className="p-3">Stars</th>
+              </tr></thead>
+              <tbody>
+                {loans.map((loan) => (
+                  <tr key={loan.id} className="border-t border-white/10">
+                    {profile?.role === "lender" && <td className="p-3 font-mono text-xs">{loan.borrower_id.slice(0, 8)}…</td>}
+                    <td className="p-3">₱{Number(loan.principal_amount).toLocaleString("en-PH")}</td>
+                    <td className="p-3">{loan.interest_rate}%</td>
+                    <td className="p-3">{loan.due_date}</td>
+                    <td className="p-3 capitalize">{loan.status}</td>
+                    {profile?.role === "lender" && (
+                      <td className="p-3">
+                        <label className="inline-flex items-center gap-2">
+                          <input type="checkbox" checked={loan.status === "completed"} disabled={loan.status === "completed" || markingId === loan.id || !["active", "overdue"].includes(loan.status)} onChange={(event) => void markPaymentReceived(loan, event.target.checked)} />
+                          <span className="text-xs">{markingId === loan.id ? "Saving…" : loan.status === "completed" ? "Recorded" : "Full payment received"}</span>
+                        </label>
+                      </td>
+                    )}
+                    <td className="p-3">{loan.rating === null ? "—" : <span className="inline-flex items-center gap-1 text-amber-300"><CheckCircle2 size={14} /> {Number(loan.rating).toFixed(0)} / 5</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
