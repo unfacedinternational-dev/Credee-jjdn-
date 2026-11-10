@@ -13,6 +13,7 @@ type Account = {
   suspended: boolean;
   directory_consent?: boolean;
 };
+type CredentialRequest = { id: string; lender_id: string; borrower_id: string; reason: string; requested_fields: string[]; status: string; created_at: string; lender_name?: string; borrower_name?: string };
 type Overview = {
   totals: { lenders: number; borrowers: number; loans: number; active_loans: number };
   lenders: Account[];
@@ -29,6 +30,9 @@ export default function CeoAdminRoute() {
   const [search, setSearch] = useState("");
   const [resetBusy, setResetBusy] = useState<string | null>(null);
   const [resetStatus, setResetStatus] = useState<Record<string, string>>({});
+  const [credentialRequests, setCredentialRequests] = useState<CredentialRequest[]>([]);
+  const [credentialActionBusy, setCredentialActionBusy] = useState("");
+  const [credentialActionMessage, setCredentialActionMessage] = useState("");
 
   const loadOverview = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -57,6 +61,14 @@ export default function CeoAdminRoute() {
       if (rpcError) throw rpcError;
       if (!data) throw new Error("The administrator overview returned no data.");
       setOverview(data as Overview);
+      const { data: requests, error: requestError } = await db.from("credential_requests").select("id,lender_id,borrower_id,reason,requested_fields,status,created_at").order("created_at", { ascending: false }).limit(100);
+      if (requestError) throw requestError;
+      const requestRows = (requests ?? []) as CredentialRequest[];
+      const profileIds = Array.from(new Set(requestRows.flatMap((item) => [item.lender_id, item.borrower_id])));
+      const { data: requestProfiles } = profileIds.length ? await db.from("profiles").select("id,display_name").in("id", profileIds) : { data: [] as { id: string; display_name: string }[] };
+      const nameMap: Record<string, string> = {};
+      (requestProfiles ?? []).forEach((item: { id: string; display_name: string }) => { nameMap[item.id] = item.display_name; });
+      setCredentialRequests(requestRows.map((item) => ({ ...item, lender_name: nameMap[item.lender_id] ?? "Lender", borrower_name: nameMap[item.borrower_id] ?? "Borrower" })));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to load the administrator dashboard.");
     } finally {
@@ -95,6 +107,16 @@ export default function CeoAdminRoute() {
     }
   }
 
+  async function decideCredentialRequest(request: CredentialRequest, decision: "approved" | "rejected") {
+    setCredentialActionBusy(request.id); setCredentialActionMessage("");
+    const db = createClient();
+    const { data: { user } } = await db.auth.getUser();
+    if (!user) { setCredentialActionMessage("Please sign in again."); setCredentialActionBusy(""); return; }
+    const { error } = await db.from("credential_requests").update({ status: decision, ceo_decided_by: user.id, ceo_decided_at: new Date().toISOString() }).eq("id", request.id).eq("status", "pending");
+    if (error) setCredentialActionMessage(error.message);
+    else { setCredentialRequests((current) => current.map((item) => item.id === request.id ? { ...item, status: decision } : item)); setCredentialActionMessage("Request " + decision + ". The borrower must still consent before credentials can be released."); }
+    setCredentialActionBusy("");
+  }
   async function signOut() {
     const db = createClient();
     await db.auth.signOut();
@@ -143,6 +165,18 @@ export default function CeoAdminRoute() {
         <div className="card"><AlertCircle className="text-amber-300" /><p className="muted mt-4 text-sm">Active / overdue loans</p><p className="mt-1 text-3xl font-bold">{overview?.totals.active_loans ?? "—"}</p></div>
       </section>
 
+      <section className="card mt-7">
+        <div><h2 className="text-xl font-bold">Borrower credential requests</h2><p className="muted mt-1 text-sm">Review lender requests. Approval does not release credentials; the borrower must separately consent.</p></div>
+        {credentialActionMessage && <p role="status" className="mt-3 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{credentialActionMessage}</p>}
+        <div className="mt-4 space-y-3">
+          {credentialRequests.map((request) => <article key={request.id} className="rounded-xl border border-white/10 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">{request.borrower_name}</p><p className="muted mt-1 text-xs">Requested by {request.lender_name}</p><p className="muted mt-2 text-sm">{request.reason}</p><p className="muted mt-1 text-xs">Requested: {request.requested_fields.join(", ")}</p></div><span className="rounded-full bg-white/5 px-3 py-1 text-xs capitalize">{request.status}</span></div>
+            {request.status === "pending" && <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void decideCredentialRequest(request, "approved")} disabled={credentialActionBusy === request.id} className="btn btn-primary px-3 py-2 text-xs">{credentialActionBusy === request.id ? "Saving…" : "Approve request"}</button><button type="button" onClick={() => void decideCredentialRequest(request, "rejected")} disabled={credentialActionBusy === request.id} className="btn btn-outline px-3 py-2 text-xs">Reject</button></div>}
+            {request.status === "approved" && <p className="mt-3 text-xs text-amber-200">Waiting for borrower consent before release.</p>}
+          </article>)}
+          {credentialRequests.length === 0 && <p className="muted rounded-xl border border-white/10 p-6 text-center text-sm">No credential requests yet.</p>}
+        </div>
+      </section>
       <section className="card mt-7">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
