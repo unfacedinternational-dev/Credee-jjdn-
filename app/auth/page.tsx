@@ -13,6 +13,11 @@ export default function AuthPage() {
   const [role, setRole] = useState<"lender" | "borrower">("lender");
   const [selectedPortal, setSelectedPortal] = useState<"lender" | "borrower" | "ceo">("lender");
   const [name, setName] = useState("");
+  const [fullAddress, setFullAddress] = useState("");
+  const [facebookUrl, setFacebookUrl] = useState("");
+  const [directoryConsent, setDirectoryConsent] = useState(false);
+  const [addressSharingConsent, setAddressSharingConsent] = useState(false);
+  const [lenderDirectoryConsent, setLenderDirectoryConsent] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -70,10 +75,22 @@ export default function AuthPage() {
         const strongPassword = password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
         if (!strongPassword) throw new Error("Use at least 8 characters with uppercase and lowercase letters, a number, and a special character.");
         if (password !== confirmPassword) throw new Error("The passwords do not match.");
+        if (!fullAddress.trim()) throw new Error("Please enter your complete residential address.");
+        if (role === "lender" && !/^https:\/\/(www\.)?facebook\.com\/[^\s]+$/i.test(facebookUrl.trim())) {
+          throw new Error("Please enter a valid Facebook profile link beginning with https://facebook.com/");
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { display_name: name, requested_role: role } },
+          options: { data: {
+            display_name: name,
+            requested_role: role,
+            full_address: fullAddress.trim(),
+            facebook_url: role === "lender" ? facebookUrl.trim() : null,
+            directory_consent: role === "borrower" ? directoryConsent : false,
+            address_sharing_consent: role === "borrower" ? addressSharingConsent : false,
+            lender_directory_consent: role === "lender" ? lenderDirectoryConsent : false,
+          } },
         });
         if (error) throw error;
         setMessage("Account created. Check your email to confirm your address, then sign in.");
@@ -193,6 +210,33 @@ export default function AuthPage() {
                 <label className="mb-2 block text-sm" htmlFor="full-name">Full name</label>
                 <input id="full-name" className="field" value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" />
               </div>
+              <div>
+                <label className="mb-2 block text-sm" htmlFor="full-address">Complete residential address</label>
+                <textarea id="full-address" className="field min-h-24 resize-y" value={fullAddress} onChange={(event) => setFullAddress(event.target.value)} required autoComplete="street-address" placeholder="House / unit, street, barangay, city, province, postal code" />
+              </div>
+              {role === "lender" ? (
+                <>
+                  <div>
+                    <label className="mb-2 block text-sm" htmlFor="facebook-url">Facebook profile link</label>
+                    <input id="facebook-url" className="field" type="url" value={facebookUrl} onChange={(event) => setFacebookUrl(event.target.value)} required placeholder="https://www.facebook.com/your.profile" />
+                  </div>
+                  <label className="flex items-start gap-3 text-sm leading-6">
+                    <input type="checkbox" className="mt-1" checked={lenderDirectoryConsent} onChange={(event) => setLenderDirectoryConsent(event.target.checked)} required />
+                    <span>I agree that my name, full address and Facebook profile link may be shown to registered CREDEE borrowers.</span>
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className="flex items-start gap-3 text-sm leading-6">
+                    <input type="checkbox" className="mt-1" checked={directoryConsent} onChange={(event) => setDirectoryConsent(event.target.checked)} />
+                    <span>I agree that my name and repayment star summary may be shown to registered CREDEE members.</span>
+                  </label>
+                  <label className="flex items-start gap-3 text-sm leading-6">
+                    <input type="checkbox" className="mt-1" checked={addressSharingConsent} onChange={(event) => setAddressSharingConsent(event.target.checked)} />
+                    <span>I separately agree that my complete address may be shown to registered CREDEE lenders.</span>
+                  </label>
+                </>
+              )}
             </>
           )}
 
