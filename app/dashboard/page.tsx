@@ -203,7 +203,7 @@ export default function Dashboard() {
 
       <section className="card mt-7">
         <h2 className="text-xl font-bold">Profile details</h2>
-        <p className="muted mt-2 text-sm">Keep your contact information current. Sharing settings control what other CREDEE members can see.</p>
+        <p className="muted mt-2 text-sm">{profile?.role === "borrower" ? "Your name appears in the member directory. Your address and current loan status are visible only to lenders connected to you in CREDEE." : "Keep your contact information current and manage your lender contact details."}</p>
         <div className="mt-4"><label className="mb-2 block text-sm" htmlFor="workspace-address">Complete residential address</label><textarea id="workspace-address" className="field min-h-24 resize-y" value={profileAddress} onChange={(event) => setProfileAddress(event.target.value)} placeholder="House / unit, street, barangay, city, province, postal code" /></div>
         {profile?.role === "lender" && <>
           <div className="mt-4"><label className="mb-2 block text-sm" htmlFor="workspace-facebook">Facebook profile link</label><input id="workspace-facebook" type="url" className="field" value={profileFacebook} onChange={(event) => setProfileFacebook(event.target.value)} placeholder="https://www.facebook.com/your.profile" /></div>
