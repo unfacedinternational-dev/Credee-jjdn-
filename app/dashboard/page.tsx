@@ -37,9 +37,7 @@ export default function Dashboard() {
   const [borrowerSearchMessage, setBorrowerSearchMessage] = useState("");
   const [documents, setDocuments] = useState<BorrowerDocument[]>([]);
   const [documentBusyId, setDocumentBusyId] = useState("");
-  const [credentialRequests, setCredentialRequests] = useState<Record<string, string>>({});
   const [credentialMessage, setCredentialMessage] = useState("");
-  const [credentialBusyId, setCredentialBusyId] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -66,10 +64,6 @@ export default function Dashboard() {
       if (activePortal === "lender") {
         const { data: assigned } = await supabase.rpc("get_lender_borrowers");
         setAssignedBorrowers((assigned ?? []) as AssignedBorrower[]);
-        const { data: requestRows } = await supabase.from("credential_requests").select("borrower_id,status,created_at").eq("lender_id", user.id).order("created_at", { ascending: false });
-        const requestMap: Record<string, string> = {};
-        (requestRows ?? []).forEach((request: { borrower_id: string; status: string }) => { if (!requestMap[request.borrower_id]) requestMap[request.borrower_id] = request.status; });
-        setCredentialRequests(requestMap);
       }
       const { data: documentRows } = await supabase.from("borrower_documents").select("id,lender_id,borrower_id,file_path,file_name,mime_type,file_size,created_at").eq(activePortal === "lender" ? "lender_id" : "borrower_id", user.id).order("created_at", { ascending: false });
       setDocuments((documentRows ?? []) as BorrowerDocument[]);
@@ -124,7 +118,7 @@ export default function Dashboard() {
     if(metadataError){setCredentialMessage(metadataError.message);setDocumentBusyId("");return;}
     const {error:uploadError}=await db.storage.from("credee-private").upload(filePath,file,{contentType:file.type,upsert:false,cacheControl:"60"});
     if(uploadError){await db.from("borrower_documents").delete().eq("id",documentId);setCredentialMessage(uploadError.message);}
-    else{const {data:rows}=await db.from("borrower_documents").select("id,lender_id,borrower_id,file_path,file_name,mime_type,file_size,created_at").eq("lender_id",user.id).order("created_at",{ascending:false});setDocuments((rows??[]) as BorrowerDocument[]);setCredentialMessage("Document uploaded. The borrower can view it after CEO approval.");}
+    else{const {data:rows}=await db.from("borrower_documents").select("id,lender_id,borrower_id,file_path,file_name,mime_type,file_size,created_at").eq("lender_id",user.id).order("created_at",{ascending:false});setDocuments((rows??[]) as BorrowerDocument[]);setCredentialMessage("Document uploaded successfully. The borrower can view it now in their workspace.");}
     setDocumentBusyId("");
   }
   async function openBorrowerDocument(document: BorrowerDocument) {
@@ -156,18 +150,6 @@ export default function Dashboard() {
       setPaymentMessage(`Payment recorded. Borrower rating: ${Number(data.rating).toFixed(0)} / 5 stars. ${Number(data.days_late) === 0 ? "Paid on or before the due date." : `Recorded ${data.days_late} day(s) late.`}`);
     }
     setMarkingId("");
-  }
-
-  async function askCeoToShareCredentials(borrowerId: string) {
-    if (profile?.role !== "lender") return;
-    setCredentialBusyId(borrowerId); setCredentialMessage("");
-    const db = createClient();
-    const { data: { user } } = await db.auth.getUser();
-    if (!user) { setCredentialMessage("Please sign in again."); setCredentialBusyId(""); return; }
-    const { error } = await db.rpc("request_borrower_document_approval", { p_borrower_id: borrowerId });
-    if (error) setCredentialMessage(error.message);
-    else { setCredentialRequests((current) => ({ ...current, [borrowerId]: "pending" })); setCredentialMessage("Your document access request has been sent to the CREDEE CEO."); }
-    setCredentialBusyId("");
   }
 
   async function logout() {
@@ -226,9 +208,9 @@ export default function Dashboard() {
           <div className="mt-7 border-t border-white/10 pt-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-bold">My borrowers</h3><p className="muted mt-1 text-sm">Address and current loan status are shown in your connected lender workspace.</p></div><span className="muted text-sm">{assignedBorrowers.length} borrower(s)</span></div>
             {credentialMessage&&<p role="status" className="mt-4 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{credentialMessage}</p>}
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {assignedBorrowers.map(borrower=>{const requestStatus=credentialRequests[borrower.borrower_id];const borrowerDocs=documents.filter(doc=>doc.borrower_id===borrower.borrower_id);return <article key={borrower.borrower_id} className="rounded-xl border border-white/10 bg-white/[.03] p-4">
+              {assignedBorrowers.map(borrower=>{const borrowerDocs=documents.filter(doc=>doc.borrower_id===borrower.borrower_id);return <article key={borrower.borrower_id} className="rounded-xl border border-white/10 bg-white/[.03] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-bold">{borrower.display_name || "CREDEE borrower"}</h4><p className="muted mt-1 text-xs">{borrower.full_address||"Address not provided"}</p></div><span className="rounded-full bg-white/10 px-3 py-1 text-xs">{borrower.current_status}</span></div><p className="muted mt-2 text-xs">{borrower.loan_count} loan record(s)</p>
-                <div className="mt-4 flex flex-wrap items-center gap-2"><button type="button" onClick={()=>void askCeoToShareCredentials(borrower.borrower_id)} disabled={Boolean(requestStatus&&["pending","approved","released"].includes(requestStatus))||credentialBusyId===borrower.borrower_id} className="btn btn-outline px-3 py-2 text-xs">{credentialBusyId===borrower.borrower_id?"Sending…":requestStatus==="pending"?"CEO review pending":requestStatus==="approved"?"CEO approved":requestStatus==="released"?"CEO approved · borrower access enabled": "Request CEO document approval"}</button><label className="btn btn-primary cursor-pointer px-3 py-2 text-xs"><UploadCloud size={14} className="mr-2 inline"/>{documentBusyId===borrower.borrower_id?"Uploading…":"Upload document"}<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="hidden" disabled={documentBusyId===borrower.borrower_id} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadBorrowerDocument(borrower.borrower_id,file);e.currentTarget.value="";}}/></label></div>
+                <div className="mt-4 flex flex-wrap items-center gap-2"><label className="btn btn-primary cursor-pointer px-3 py-2 text-xs"><UploadCloud size={14} className="mr-2 inline"/>{documentBusyId===borrower.borrower_id?"Uploading…":"Upload document"}<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="hidden" disabled={documentBusyId===borrower.borrower_id} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadBorrowerDocument(borrower.borrower_id,file);e.currentTarget.value="";}}/></label></div>
                 <div className="mt-4 border-t border-white/10 pt-3"><p className="mb-2 text-xs font-semibold text-violet-200">Uploaded documents</p>{borrowerDocs.length===0?<p className="muted text-xs">No documents uploaded.</p>:borrowerDocs.map(doc=><button type="button" key={doc.id} onClick={()=>void openBorrowerDocument(doc)} className="flex w-full items-center gap-2 py-2 text-left text-xs text-sky-300 hover:underline"><FileText size={15}/><span className="min-w-0 flex-1 truncate">{doc.file_name}</span><ExternalLink size={13}/></button>)}</div>
               </article>;})}
               {assignedBorrowers.length===0&&<p className="muted rounded-xl border border-white/10 p-6 text-center text-sm md:col-span-2">You have not added any borrowers yet. Search above to add one.</p>}
@@ -240,8 +222,8 @@ export default function Dashboard() {
 
       {profile?.role === "borrower" && (
         <section className="card mt-7">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">My documents</h2><p className="muted mt-2 text-sm">Documents shared by your connected lender appear here after CEO approval. This is a view-only area; you cannot replace or delete uploaded files.</p></div><button type="button" onClick={()=>void refreshBorrowerDocuments()} className="btn btn-outline px-3 py-2 text-xs">Refresh documents</button></div>
-          {documents.length===0?<p className="muted mt-5 text-sm">No approved documents are available yet.</p>:<div className="mt-4 space-y-2">{documents.map(doc=><button type="button" key={doc.id} onClick={()=>void openBorrowerDocument(doc)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 p-3 text-left hover:bg-white/5"><FileText className="text-violet-300"/><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{doc.file_name}</span><span className="muted mt-1 block text-xs">{new Date(doc.created_at).toLocaleString("en-PH")}</span></span><ExternalLink size={15} className="text-sky-300"/></button>)}</div>}
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">My documents</h2><p className="muted mt-2 text-sm">Documents uploaded by your connected lender appear here automatically. This is a view-only area; you cannot replace or delete uploaded files.</p></div><button type="button" onClick={()=>void refreshBorrowerDocuments()} className="btn btn-outline px-3 py-2 text-xs">Refresh documents</button></div>
+          {documents.length===0?<p className="muted mt-5 text-sm">No documents have been uploaded for you yet.</p>:<div className="mt-4 space-y-2">{documents.map(doc=><button type="button" key={doc.id} onClick={()=>void openBorrowerDocument(doc)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 p-3 text-left hover:bg-white/5"><FileText className="text-violet-300"/><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{doc.file_name}</span><span className="muted mt-1 block text-xs">{new Date(doc.created_at).toLocaleString("en-PH")}</span></span><ExternalLink size={15} className="text-sky-300"/></button>)}</div>}
         </section>
       )}
       <section className="card mt-7">
