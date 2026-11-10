@@ -112,8 +112,14 @@ export default function AuthPage() {
           } },
         });
         if (error) throw error;
-        setMessage("Account created. Check your email to confirm your address, then sign in.");
-        setMode("login");
+        setPhone(normalizedPhone);
+        if (!signUpData.session) {
+          setMode("verify");
+          setMessage("We sent a verification code by SMS. Enter it below to activate your account.");
+        } else {
+          setMode("login");
+          setMessage("Account created. You can now sign in using your mobile number and password.");
+        }
         return;
       }
 
