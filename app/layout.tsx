@@ -1,4 +1,22 @@
 import type { Metadata } from "next";
 import "./globals.css";
-export const metadata: Metadata = { title: "CreditTrust | Lending with accountability", description: "A smarter way to lend. A better way to build trust." };
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><body>{children}</body></html>; }
+
+export const metadata: Metadata = {
+  title: "CreditTrust - Multi-Lender & Borrower Reputation Platform",
+  description:
+    "Connect lenders and borrowers through a transparent lending and repayment reputation platform.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body className="min-h-screen bg-slate-950 text-slate-100 antialiased">
+        {children}
+      </body>
+    </html>
+  );
+}
