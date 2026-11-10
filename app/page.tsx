@@ -40,6 +40,19 @@ export default function Home() {
         </div>
 
         <div className="mt-12 grid gap-6 md:grid-cols-2">
+          <article className="relative overflow-hidden rounded-[2rem] border-2 border-[#d99aaa] bg-gradient-to-br from-[#fff0f4] via-[#fbe4eb] to-[#f2d6df] p-7 shadow-[0_16px_45px_rgba(166,94,115,0.18)] md:p-9">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#a65e73] text-white">
+              <HeartHandshake size={27} />
+            </div>
+            <div className="eyebrow mt-6">For borrowers</div>
+            <h2 className="mt-2 text-3xl font-semibold">Take a clearer step toward financial support.</h2>
+            <p className="muted mt-4 leading-7">
+              Connect with the lending community, review your loan details, follow balances and due dates, and keep track of your repayment record.
+            </p>
+            <Link className="btn btn-primary mt-7 w-full justify-center ring-2 ring-[#d8b56e] ring-offset-2 ring-offset-[#fbe4eb]" href="/auth?role=borrower">
+              Register as a borrower <ArrowRight size={16} className="ml-2" />
+            </Link>
+          </article>
           <article className="glass rounded-[2rem] p-7 md:p-9">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f3e3e7] text-[#a65e73]">
               <HandCoins size={27} />
@@ -49,24 +62,11 @@ export default function Home() {
             <p className="muted mt-4 leading-7">
               Organize the people you lend to, record agreements, track balances and due dates, and keep payment histories in one private place.
             </p>
-            <Link className="btn btn-primary mt-7 w-full justify-center" href="/auth?role=lender">
+            <Link className="btn btn-outline mt-7 w-full justify-center" href="/auth?role=lender">
               Register as a lender <ArrowRight size={16} className="ml-2" />
             </Link>
           </article>
 
-          <article className="glass rounded-[2rem] p-7 md:p-9">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eee9dc] text-[#a58a53]">
-              <HeartHandshake size={27} />
-            </div>
-            <div className="eyebrow mt-6">For borrowers</div>
-            <h2 className="mt-2 text-3xl font-semibold">Take a clearer step toward financial support.</h2>
-            <p className="muted mt-4 leading-7">
-              Connect with the lending community, review your loan details, follow balances and due dates, and keep track of your repayment record.
-            </p>
-            <Link className="btn btn-outline mt-7 w-full justify-center" href="/auth?role=borrower">
-              Register as a borrower <ArrowRight size={16} className="ml-2" />
-            </Link>
-          </article>
         </div>
 
         <p className="mt-7 text-center text-sm text-[#98717c]">
