@@ -65,7 +65,7 @@ export async function middleware(request: NextRequest) {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role,roles")
     .eq("id", userId)
     .maybeSingle();
 
@@ -74,26 +74,21 @@ export async function middleware(request: NextRequest) {
   }
 
   const role = profile.role;
+  const roles: string[] = Array.isArray(profile.roles) ? profile.roles : [role];
+  const selectedPortal = request.nextUrl.searchParams.get("portal");
   const allowed =
-    (isLenderRoute && role === "lender") ||
-    (isBorrowerRoute && role === "borrower") ||
-    (isDashboardRoute && (role === "lender" || role === "borrower")) ||
-    (isSupportRoute && (role === "lender" || role === "borrower" || role === "ceo")) ||
-    (isDirectoryRoute && (role === "lender" || role === "borrower")) ||
-    (isCeoRoute && role === "ceo");
+    (isLenderRoute && roles.includes("lender")) ||
+    (isBorrowerRoute && roles.includes("borrower")) ||
+    (isDashboardRoute && (
+      (selectedPortal === "lender" && roles.includes("lender")) ||
+      (selectedPortal === "borrower" && roles.includes("borrower")) ||
+      (!selectedPortal && (role === "lender" || role === "borrower") && roles.includes(role))
+    )) ||
+    (isSupportRoute && (roles.includes("lender") || roles.includes("borrower") || roles.includes("ceo"))) ||
+    (isDirectoryRoute && (roles.includes("lender") || roles.includes("borrower"))) ||
+    (isCeoRoute && roles.includes("ceo"));
 
-  if (!allowed) {
-    const destination =
-      role === "ceo"
-        ? "/ceo/super-admin"
-        : role === "lender"
-          ? "/lender/dashboard"
-          : role === "borrower"
-            ? "/borrower/portal"
-            : "/auth?error=role";
-
-    return redirectWithCookies(new URL(destination, request.url));
-  }
+  if (!allowed) return redirectWithCookies(new URL("/auth?error=role", request.url));
 
   return response;
 }
