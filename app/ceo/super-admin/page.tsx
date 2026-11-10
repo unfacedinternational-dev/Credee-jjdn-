@@ -98,6 +98,7 @@ export default function CeoAdminRoute() {
   async function signOut() {
     const db = createClient();
     await db.auth.signOut();
+    document.cookie = "credee_ceo_unlock=; Max-Age=0; Path=/ceo; SameSite=Lax; Secure";
     router.replace("/auth");
     router.refresh();
   }
