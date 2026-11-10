@@ -133,6 +133,11 @@ export default function Dashboard() {
     setMarkingId("");
   }
 
+  async function refreshBorrowerDirectory() {
+    const { data, error } = await createClient().rpc("get_shared_account_directory");
+    if (error) setCredentialMessage(error.message);
+    else setCommunityBorrowers((data?.borrowers ?? []) as BorrowerDirectoryItem[]);
+  }
   async function askCeoToShareCredentials(borrowerId: string) {
     if (profile?.role !== "lender") return;
     setCredentialBusyId(borrowerId); setCredentialMessage("");
@@ -229,7 +234,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div><div className="eyebrow">Shared community</div><h2 className="mt-2 text-xl font-bold">Borrower directory</h2>
               <p className="muted mt-2 text-sm">Borrowers who agreed to share their repayment summary. Full addresses appear only when they separately consented.</p>
-            </div><span className="muted text-sm">{communityBorrowers.length} borrower profiles</span>
+            </div><div className="flex items-center gap-3"><span className="muted text-sm">{communityBorrowers.length} borrower profiles</span><button type="button" onClick={() => void refreshBorrowerDirectory()} className="btn btn-outline px-3 py-2 text-xs">Refresh list</button></div>
           </div>
           {credentialMessage && <p role="status" className="mt-4 rounded-lg bg-white/5 p-3 text-sm text-violet-200">{credentialMessage}</p>}
           <div className="mt-5 grid gap-4 md:grid-cols-2">
