@@ -1,0 +1,5 @@
+"use client";
+import { useEffect,useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+export default function CeoAdminRoute(){const router=useRouter();const [status,setStatus]=useState("Verifying administrator access…");useEffect(()=>{(async()=>{const db=createClient();const {data:{user}}=await db.auth.getUser();if(!user){router.replace("/auth");return;}const {data:p}=await db.from("profiles").select("role").eq("id",user.id).single();if(p?.role!=="ceo"){router.replace("/auth");return;}setStatus("CEO authentication verified. The Super Admin console is not implemented yet.");})();},[router]);return <main className="container min-h-screen py-20"><div className="card mx-auto max-w-xl"><div className="eyebrow">Restricted administrator area</div><h1 className="mt-3 text-3xl font-bold">CreditTrust Super Admin</h1><p className="muted mt-4">{status}</p><button className="btn btn-outline mt-6" onClick={()=>router.push("/dashboard")}>Go to account dashboard</button></div></main>;}
