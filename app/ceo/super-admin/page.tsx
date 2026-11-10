@@ -97,6 +97,7 @@ export default function CeoAdminRoute() {
           <button onClick={() => void loadOverview(true)} disabled={refreshing} className="btn btn-outline">
             <RefreshCw size={16} className="mr-2" />{refreshing ? "Refreshing…" : "Refresh"}
           </button>
+          <a href="/ceo/customer-service" className="btn btn-primary">Customer Service Inbox</a>
           <button onClick={signOut} className="btn btn-outline"><LogOut size={16} className="mr-2" />Sign out</button>
         </div>
       </header>
