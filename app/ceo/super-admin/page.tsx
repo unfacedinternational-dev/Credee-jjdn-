@@ -27,6 +27,8 @@ export default function CeoAdminRoute() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"lenders" | "borrowers">("lenders");
   const [search, setSearch] = useState("");
+  const [resetBusy, setResetBusy] = useState<string | null>(null);
+  const [resetStatus, setResetStatus] = useState<Record<string, string>>({});
 
   const loadOverview = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -74,6 +76,24 @@ export default function CeoAdminRoute() {
       (account.email ?? "").toLowerCase().includes(term)
     );
   }, [overview, tab, search]);
+
+  async function sendPasswordReset(account: Account) {
+    if (!account.email) return;
+    setResetBusy(account.id);
+    setResetStatus((current) => ({ ...current, [account.id]: "" }));
+    try {
+      const db = createClient();
+      const { error: resetError } = await db.auth.resetPasswordForEmail(account.email, {
+        redirectTo: `${window.location.origin}/auth?mode=reset`,
+      });
+      if (resetError) throw resetError;
+      setResetStatus((current) => ({ ...current, [account.id]: "Password reset email sent." }));
+    } catch (e) {
+      setResetStatus((current) => ({ ...current, [account.id]: e instanceof Error ? e.message : "Could not send reset email." }));
+    } finally {
+      setResetBusy(null);
+    }
+  }
 
   async function signOut() {
     const db = createClient();
@@ -141,12 +161,12 @@ export default function CeoAdminRoute() {
 
         <div className="mt-5 overflow-x-auto">
           <table className="w-full min-w-[620px] text-left text-sm">
-            <thead className="muted"><tr><th className="p-3">Name</th><th className="p-3">Email</th><th className="p-3">Registered</th><th className="p-3">Account status</th>{tab === "borrowers" && <th className="p-3">Directory sharing</th>}</tr></thead>
+            <thead className="muted"><tr><th className="p-3">Name</th><th className="p-3">Email / password recovery</th><th className="p-3">Registered</th><th className="p-3">Account status</th>{tab === "borrowers" && <th className="p-3">Directory sharing</th>}</tr></thead>
             <tbody>
               {accounts.map((account) => (
                 <tr key={account.id} className="border-t border-white/10">
                   <td className="p-3 font-medium">{account.display_name || "Unnamed account"}</td>
-                  <td className="p-3 text-violet-200">{account.email || "—"}</td>
+                  <td className="p-3"><div className="flex flex-wrap items-center gap-2"><span className="text-violet-200">{account.email || "—"}</span><button type="button" onClick={() => void sendPasswordReset(account)} disabled={!account.email || resetBusy === account.id} className="rounded-lg border border-amber-300/40 px-2.5 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-300/10 disabled:cursor-not-allowed disabled:opacity-50">{resetBusy === account.id ? "Sending…" : "Send reset link"}</button></div><p className="mt-1 text-xs text-violet-300/70">Password is private and cannot be viewed.</p>{resetStatus[account.id] && <p role="status" className="mt-1 text-xs text-emerald-300">{resetStatus[account.id]}</p>}</td>
                   <td className="p-3">{new Date(account.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })}</td>
                   <td className="p-3"><span className={account.suspended ? "text-red-300" : "text-emerald-300"}>{account.suspended ? "Suspended" : "Active"}</span></td>
                   {tab === "borrowers" && <td className="p-3">{account.directory_consent ? "Opted in" : "Private"}</td>}
