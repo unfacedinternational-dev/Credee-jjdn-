@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 export default function AuthPage() {
   const router = useRouter();
   const logoTaps = useRef(0);
-  const [mode, setMode] = useState<"login" | "register" | "reset" | "verify">("register");
+  const [mode, setMode] = useState<"login" | "register" | "reset">("register");
   const [role, setRole] = useState<"lender" | "borrower">("lender");
   const [selectedPortal, setSelectedPortal] = useState<"lender" | "borrower" | "ceo">("lender");
   const [name, setName] = useState("");
@@ -18,7 +18,6 @@ export default function AuthPage() {
   const [lenderDirectoryConsent, setLenderDirectoryConsent] = useState(false);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,15 +64,6 @@ export default function AuthPage() {
     try {
       const supabase = createClient();
 
-      if (mode === "verify") {
-        const normalizedPhone = normalizePhone(phone);
-        const { error } = await supabase.auth.verifyOtp({ phone: normalizedPhone, token: otp.trim(), type: "sms" });
-        if (error) throw error;
-        setMode("login");
-        setMessage("Mobile number verified. You can now sign in using your mobile number and password.");
-        return;
-      }
-
       if (mode === "reset") {
         if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
           throw new Error("Use at least 8 characters with uppercase and lowercase letters, a number, and a special character.");
@@ -114,12 +104,10 @@ export default function AuthPage() {
         if (error) throw error;
         setPhone(normalizedPhone);
         if (!signUpData.session) {
-          setMode("verify");
-          setMessage("We sent a verification code by SMS. Enter it below to activate your account.");
-        } else {
-          setMode("login");
-          setMessage("Account created. You can now sign in using your mobile number and password.");
+          throw new Error("Phone confirmation is still enabled in Supabase. Turn off Confirm phone in Authentication settings, then try again. CREDEE does not use SMS verification.");
         }
+        setMode("login");
+        setMessage("Account created. You can now sign in using your mobile number and password.");
         return;
       }
 
@@ -184,14 +172,14 @@ export default function AuthPage() {
         </button>
 
         <h1 className="mt-8 text-3xl font-bold">
-          {ceoAccess ? "CEO sign in" : mode === "register" ? "Create your account" : mode === "reset" ? "Set a new password" : mode === "verify" ? "Verify mobile number" : "Welcome back"}
+          {ceoAccess ? "CEO sign in" : mode === "register" ? "Create your account" : mode === "reset" ? "Set a new password" : "Welcome back"}
         </h1>
         <p className="muted mt-2">
           {ceoAccess
             ? "Restricted administrator access."
             : mode === "register"
               ? "Choose the account type that fits you."
-              : mode === "reset" ? "Create a new password for your CREDEE account." : mode === "verify" ? "Verify your mobile number to finish registration." : "Sign in to your private workspace."}
+              : mode === "reset" ? "Create a new password for your CREDEE account." : "Sign in to your private workspace."}
         </p>
 
         {!ceoAccess && mode === "login" && (
@@ -204,7 +192,7 @@ export default function AuthPage() {
           </div>
         )}
 
-        {!ceoAccess && mode !== "reset" && mode !== "verify" && (
+        {!ceoAccess && mode !== "reset" && (
           <div className="mt-6 grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -264,18 +252,14 @@ export default function AuthPage() {
             </>
           )}
 
-          {mode === "verify" && <div>
-            <label className="mb-2 block text-sm" htmlFor="sms-code">SMS verification code</label>
-            <input id="sms-code" className="field" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(event) => setOtp(event.target.value)} required placeholder="Enter the code sent to your phone" />
-          </div>}
-          {mode !== "reset" && mode !== "verify" && (ceoAccess ? <div>
+          {mode !== "reset" && (ceoAccess ? <div>
             <label className="mb-2 block text-sm" htmlFor="email">CEO email address</label>
             <input id="email" className="field" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
           </div> : mode === "login" ? <div>
             <label className="mb-2 block text-sm" htmlFor="mobile-number-login">Mobile number</label>
             <input id="mobile-number-login" className="field" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required placeholder="09XXXXXXXXX" autoComplete="tel" />
           </div> : null)}
-          {mode !== "verify" && <div>
+          {<div>
             <label className="mb-2 block text-sm" htmlFor="password">{mode === "reset" ? "New password" : "Password"}</label>
             <input id="password" className="field" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete={mode === "register" ? "new-password" : "current-password"} />
             {mode !== "login" && <p className="muted mt-2 text-xs leading-5">Password must contain at least 8 characters, including uppercase letters (A–Z), lowercase letters (a–z), numbers (0–9), and a special character (such as ! @ # $ %).</p>}
@@ -288,7 +272,7 @@ export default function AuthPage() {
             </div>
           )}
           <button disabled={busy} className="btn btn-primary w-full disabled:opacity-50">
-            {busy ? "Please wait…" : mode === "register" ? "Create account" : mode === "reset" ? "Update password" : mode === "verify" ? "Verify number" : "Sign in"}
+            {busy ? "Please wait…" : mode === "register" ? "Create account" : mode === "reset" ? "Update password" : "Sign in"}
           </button>
         </form>
 
