@@ -56,6 +56,12 @@ export default function AuthPage() {
     return "+63" + digits;
   }
 
+  // Internal-only credential alias; members use their mobile number in the UI.
+  function phoneLoginEmail(normalizedPhone: string) {
+    return `u${normalizedPhone.replace(/\\D/g, "")}@login.credee.invalid`;
+  }
+
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -88,12 +94,13 @@ export default function AuthPage() {
         if (role === "borrower" && !/^https:\/\/(www\.)?facebook\.com\/[^\s]+$/i.test(facebookUrl.trim())) {
           throw new Error("Please enter a valid Facebook profile link beginning with https://facebook.com/");
         }
-        const { data: signUpData, error } = await supabase.auth.signUp({
-          phone: normalizedPhone,
+        const { error } = await supabase.auth.signUp({
+          email: phoneLoginEmail(normalizedPhone),
           password,
           options: { data: {
             display_name: name,
             requested_role: role,
+            phone: normalizedPhone,
             full_address: fullAddress.trim(),
             facebook_url: role === "borrower" ? facebookUrl.trim() : null,
             directory_consent: role === "borrower",
@@ -103,9 +110,6 @@ export default function AuthPage() {
         });
         if (error) throw error;
         setPhone(normalizedPhone);
-        if (!signUpData.session) {
-          throw new Error("Phone confirmation is still enabled in Supabase. Turn off Confirm phone in Authentication settings, then try again. CREDEE does not use SMS verification.");
-        }
         setMode("login");
         setMessage("Account created. You can now sign in using your mobile number and password.");
         return;
@@ -115,9 +119,10 @@ export default function AuthPage() {
       // This prevents a CEO session from being reused when another account signs in.
       await supabase.auth.signOut({ scope: "local" });
 
+      const normalizedPhone = normalizePhone(phone);
       const credentials = selectedPortal === "ceo"
         ? { email: email.trim().toLowerCase(), password }
-        : { phone: normalizePhone(phone), password };
+        : { email: phoneLoginEmail(normalizedPhone), password };
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword(credentials);
       if (authError) throw authError;
       if (!authData.user) throw new Error("Authentication failed.");
