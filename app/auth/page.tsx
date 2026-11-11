@@ -58,7 +58,7 @@ export default function AuthPage() {
 
   // Internal-only credential alias; members use their mobile number in the UI.
   function phoneLoginEmail(normalizedPhone: string) {
-    return `u${normalizedPhone.replace(/\\D/g, "")}@login.credee.invalid`;
+    return `u${normalizedPhone.replace(/\D/g, "")}@login.credee.invalid`;
   }
 
 
