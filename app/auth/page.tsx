@@ -84,7 +84,7 @@ export default function AuthPage() {
         if (password !== confirmPassword) throw new Error("The passwords do not match.");
         if (!fullAddress.trim()) throw new Error("Please enter your complete residential address.");
         const normalizedPhone = normalizePhone(phone);
-        if (!/^\\+639\\d{9}$/.test(normalizedPhone)) throw new Error("Enter a valid Philippine mobile number, such as 09XXXXXXXXX or +639XXXXXXXXX.");
+        if (!/^\+639\d{9}$/.test(normalizedPhone)) throw new Error("Enter a valid Philippine mobile number, such as 09XXXXXXXXX or +639XXXXXXXXX.");
         if (role === "borrower" && !/^https:\/\/(www\.)?facebook\.com\/[^\s]+$/i.test(facebookUrl.trim())) {
           throw new Error("Please enter a valid Facebook profile link beginning with https://facebook.com/");
         }
